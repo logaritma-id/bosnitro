@@ -134,7 +134,7 @@ export default function KasirPage() {
     });
   };
 
-  const updateQty = (id: string, delta: number) => {
+  const updateQty = (id: string | number, delta: number) => {
     setCart((prev) => prev.map(item => {
       if (item.id === id) {
         const newQty = item.qty + delta;
@@ -144,7 +144,7 @@ export default function KasirPage() {
     }).filter(item => item.qty > 0));
   };
 
-  const removeItem = (id: string) => {
+  const removeItem = (id: string | number) => {
     setCart((prev) => prev.filter((item) => item.id !== id));
   };
 
