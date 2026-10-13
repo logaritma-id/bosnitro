@@ -170,6 +170,8 @@ export default function OwnerDashboard() {
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [newCustomer, setNewCustomer] = useState<{id?: number, plat: string, phone: string, fav: string, poin: number, kunjung: number, branch: string}>({ plat: '', phone: '', fav: 'Isi Baru Motor', poin: 10, kunjung: 1, branch: 'Tambun 1' });
   const [showRedeemModal, setShowRedeemModal] = useState<any | null>(null);
+  const [financeSearch, setFinanceSearch] = useState("");
+  const [financePaymentFilter, setFinancePaymentFilter] = useState<"ALL" | "CASH" | "QRIS">("ALL");
 
 
   // Ambil data Transaksi, Absensi, Shift, dan Hardware IoT langsung dari Database Supabase
@@ -524,6 +526,24 @@ export default function OwnerDashboard() {
         return bName.toLowerCase() === selectedBranch.toLowerCase();
       });
 
+  const qrisSales = displayedSales.filter(t => (t.payment_method || '').toUpperCase().includes('QRIS'));
+  const totalQris = qrisSales.reduce((sum, t) => sum + Number(t.total_amount || 0), 0);
+  const cashSales = displayedSales.filter(t => !(t.payment_method || '').toUpperCase().includes('QRIS'));
+  const totalCash = cashSales.reduce((sum, t) => sum + Number(t.total_amount || 0), 0);
+  const avgTrxAmount = displayedSales.length > 0 ? Math.round(stats.omzet / displayedSales.length) : 0;
+
+  const filteredFinanceSales = displayedSales.filter(trx => {
+    if (financePaymentFilter === "CASH" && (trx.payment_method || '').toUpperCase().includes('QRIS')) return false;
+    if (financePaymentFilter === "QRIS" && !(trx.payment_method || '').toUpperCase().includes('QRIS')) return false;
+    if (!financeSearch.trim()) return true;
+    const q = financeSearch.toLowerCase().trim();
+    const idStr = String(trx.id || '').toLowerCase();
+    const branchStr = ((trx.branch_id === 'd0e659b9-0c62-4015-ab1b-265de35bfcd1' || !trx.branch_id) ? 'tambun 1' : String(trx.branch_id)).toLowerCase();
+    const methodStr = (trx.payment_method || 'cash').toLowerCase();
+    const amountStr = String(trx.total_amount || '');
+    return idStr.includes(q) || branchStr.includes(q) || methodStr.includes(q) || amountStr.includes(q);
+  });
+
   // Handler untuk menghapus satu catatan absensi
   const handleDeleteAttendance = async (att: any) => {
     if (!confirm(`Hapus rekaman absensi ${att.cashier} (${att.time} di ${att.branch})?\nTindakan ini akan menghapus data foto dan status absensi.`)) return;
@@ -724,6 +744,75 @@ export default function OwnerDashboard() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  // Handler ekspor riwayat transaksi & laporan keuangan ke CSV / Excel
+  const handleExportFinanceExcel = () => {
+    if (displayedSales.length === 0) {
+      alert("Tidak ada data transaksi keuangan untuk diekspor pada periode ini.");
+      return;
+    }
+    const headers = ["No", "ID Transaksi", "Waktu & Tanggal", "Cabang", "Metode Pembayaran", "Nilai Transaksi (Rp)", "Status"];
+    const rows = displayedSales.map((trx: any, idx: number) => {
+      const trxId = `TRX-${String(trx.id || '').slice(0, 8)}`;
+      const trxTime = new Date(trx.created_at).toLocaleString('id-ID');
+      const branchName = (trx.branch_id === 'd0e659b9-0c62-4015-ab1b-265de35bfcd1' || !trx.branch_id) ? 'Tambun 1' : trx.branch_id;
+      const paymentMethod = (trx.payment_method || '').toUpperCase().includes('QRIS') ? 'QRIS' : 'CASH (Tunai)';
+      const amount = Number(trx.total_amount || 0);
+      const status = trx.payment_status || 'COMPLETED';
+      return [
+        idx + 1,
+        `"${trxId}"`,
+        `"${trxTime}"`,
+        `"${branchName}"`,
+        `"${paymentMethod}"`,
+        amount,
+        `"${status}"`
+      ];
+    });
+
+    const allRows = [
+      headers,
+      ...rows,
+      ["", "", "", "", "", "", ""],
+      ["", "", "", "RINGKASAN LAPORAN KEUANGAN", "", "", ""],
+      ["", "", "", "Total Pemasukan (Omzet)", "", stats.omzet, ""],
+      ["", "", "", "Total Tunai (Cash)", "", totalCash, ""],
+      ["", "", "", "Total QRIS", "", totalQris, ""],
+      ["", "", "", "Total Pengeluaran (Estimasi HPP 20%)", "", Math.round(stats.omzet * 0.2), ""],
+      ["", "", "", "Estimasi Laba Bersih (80%)", "", stats.profit, ""]
+    ];
+
+    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + allRows.map((e: any) => e.join(",")).join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Laporan_Keuangan_${selectedBranch.replace(/\s+/g, '_')}_${selectedPeriod}_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Handler untuk menghapus / void transaksi penjualan
+  const handleDeleteTransaction = async (trx: any) => {
+    const trxDisplayId = `TRX-${String(trx.id || '').slice(0, 8)}`;
+    const trxAmount = Number(trx.total_amount || 0).toLocaleString('id-ID');
+    if (!confirm(`Hapus / Void transaksi ${trxDisplayId} senilai Rp ${trxAmount}?\nData omzet dan laporan keuangan akan langsung diperbarui otomatis.`)) return;
+
+    try {
+      const targetId = trx.id;
+      if (targetId && !String(targetId).startsWith('trx-')) {
+        const { error } = await supabase
+          .from('transactions')
+          .delete()
+          .eq('id', targetId);
+        if (error) console.warn("Supabase delete transaction warning:", error);
+      }
+      setRawTransactions(prev => prev.filter(t => t.id !== targetId));
+      alert(`✅ Transaksi ${trxDisplayId} berhasil dihapus.`);
+    } catch (err: any) {
+      alert("Gagal menghapus transaksi: " + (err?.message || "Error"));
+    }
   };
 
   // Handler untuk menghapus gambar rekaman CCTV transaksi
@@ -1783,70 +1872,238 @@ export default function OwnerDashboard() {
 
           {activeTab === "keuangan" && (
             <div className="space-y-6">
-               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+               {/* 4 Kartu Metrik Utama Keuangan */}
+               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
-                     <p className="text-gray-700 font-extrabold text-sm mb-1">
-                       Total Pemasukan ({selectedPeriod === 'today' ? 'Hari Ini' : selectedPeriod === 'yesterday' ? 'Kemarin' : selectedPeriod === '7days' ? '7 Hari Terakhir' : 'Bulan Ini'})
+                     <div className="flex items-center justify-between mb-1">
+                       <p className="text-gray-700 font-extrabold text-sm">
+                         Total Pemasukan ({selectedPeriod === 'today' ? 'Hari Ini' : selectedPeriod === 'yesterday' ? 'Kemarin' : selectedPeriod === '7days' ? '7 Hari Terakhir' : 'Bulan Ini'})
+                       </p>
+                       <span className="p-2 bg-blue-50 text-blue-600 rounded-lg">
+                         <DollarSign size={18} />
+                       </span>
+                     </div>
+                     <h2 className="text-2xl font-black text-blue-600 mb-2">Rp {stats.omzet.toLocaleString('id-ID')}</h2>
+                     <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-gray-100 text-xs">
+                       <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 font-bold border border-emerald-200">
+                         💵 Rp {totalCash.toLocaleString('id-ID')}
+                       </span>
+                       <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-purple-50 text-purple-800 font-bold border border-purple-200">
+                         📱 Rp {totalQris.toLocaleString('id-ID')}
+                       </span>
+                     </div>
+                  </div>
+
+                  <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                     <div className="flex items-center justify-between mb-1">
+                       <p className="text-gray-700 font-extrabold text-sm">Total Pengeluaran (HPP)</p>
+                       <span className="p-2 bg-red-50 text-red-600 rounded-lg">
+                         <TrendingUp size={18} />
+                       </span>
+                     </div>
+                     <h2 className="text-2xl font-black text-red-600 mb-2">Rp {Math.round(stats.omzet * 0.2).toLocaleString('id-ID')}</h2>
+                     <p className="text-xs text-gray-600 font-medium pt-2 border-t border-gray-100">
+                       Estimasi HPP barang & operasional (20%)
                      </p>
-                     <h2 className="text-3xl font-black text-blue-600">Rp {stats.omzet.toLocaleString('id-ID')}</h2>
                   </div>
+
                   <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
-                     <p className="text-gray-700 font-extrabold text-sm mb-1">Total Pengeluaran (HPP Estimasi)</p>
-                     <h2 className="text-3xl font-black text-red-600">Rp {Math.round(stats.omzet * 0.2).toLocaleString('id-ID')}</h2>
+                     <div className="flex items-center justify-between mb-1">
+                       <p className="text-gray-700 font-extrabold text-sm">Laba Bersih Estimasi</p>
+                       <span className="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
+                         <CheckCircle size={18} />
+                       </span>
+                     </div>
+                     <h2 className="text-2xl font-black text-emerald-600 mb-2">Rp {stats.profit.toLocaleString('id-ID')}</h2>
+                     <p className="text-xs text-gray-600 font-medium pt-2 border-t border-gray-100">
+                       Estimasi margin laba bersih (~80%)
+                     </p>
                   </div>
+
                   <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
-                     <p className="text-gray-700 font-extrabold text-sm mb-1">Laba Bersih Estimasi</p>
-                     <h2 className="text-3xl font-black text-emerald-600">Rp {stats.profit.toLocaleString('id-ID')}</h2>
+                     <div className="flex items-center justify-between mb-1">
+                       <p className="text-gray-700 font-extrabold text-sm">Rata-rata Transaksi</p>
+                       <span className="p-2 bg-amber-50 text-amber-600 rounded-lg">
+                         <ShoppingCart size={18} />
+                       </span>
+                     </div>
+                     <h2 className="text-2xl font-black text-amber-600 mb-2">Rp {avgTrxAmount.toLocaleString('id-ID')}</h2>
+                     <p className="text-xs text-gray-600 font-medium pt-2 border-t border-gray-100">
+                       Dari total <strong className="text-gray-900">{displayedSales.length}</strong> transaksi berhasil
+                     </p>
                   </div>
                </div>
-               
-               <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                  <div className="p-5 border-b bg-gray-50/50 flex justify-between items-center">
-                     <h3 className="font-bold text-gray-800">
-                       Riwayat Transaksi Penjualan ({displayedSales.length} Transaksi)
-                     </h3>
-                     <button 
-                       onClick={() => alert("Data riwayat transaksi siap diekspor!")} 
-                       className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-bold shadow-md transition-all"
-                     >
-                       Export Excel
-                     </button>
+
+               {/* Ringkasan Breakdown Metode Pembayaran */}
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-white p-5 rounded-2xl shadow-sm border border-emerald-200 bg-gradient-to-br from-emerald-50/50 to-white">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="w-3 h-3 rounded-full bg-emerald-600"></span>
+                          <span className="text-xs font-bold uppercase text-emerald-900 tracking-wider">Metode Pembayaran Tunai (Cash)</span>
+                        </div>
+                        <h3 className="text-2xl font-black text-emerald-700 mt-2">Rp {totalCash.toLocaleString('id-ID')}</h3>
+                        <p className="text-xs text-emerald-900 font-medium mt-1">
+                          Kontribusi: {stats.omzet > 0 ? Math.round((totalCash / stats.omzet) * 100) : 0}% dari total pemasukan
+                        </p>
+                      </div>
+                      <span className="px-3 py-1 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-full font-black text-xs">
+                        {cashSales.length} Transaksi
+                      </span>
+                    </div>
                   </div>
+
+                  <div className="bg-white p-5 rounded-2xl shadow-sm border border-purple-200 bg-gradient-to-br from-purple-50/50 to-white">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="w-3 h-3 rounded-full bg-purple-600"></span>
+                          <span className="text-xs font-bold uppercase text-purple-900 tracking-wider">Metode Pembayaran QRIS (Digital)</span>
+                        </div>
+                        <h3 className="text-2xl font-black text-purple-700 mt-2">Rp {totalQris.toLocaleString('id-ID')}</h3>
+                        <p className="text-xs text-purple-900 font-medium mt-1">
+                          Kontribusi: {stats.omzet > 0 ? Math.round((totalQris / stats.omzet) * 100) : 0}% dari total pemasukan
+                        </p>
+                      </div>
+                      <span className="px-3 py-1 bg-purple-100 text-purple-800 border border-purple-300 rounded-full font-black text-xs">
+                        {qrisSales.length} Transaksi
+                      </span>
+                    </div>
+                  </div>
+               </div>
+
+               {/* Tabel Riwayat Transaksi Penjualan Lengkap */}
+               <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                  <div className="p-5 border-b bg-gray-50/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                     <div>
+                       <h3 className="font-bold text-gray-800 text-base">
+                         Riwayat Transaksi Penjualan ({filteredFinanceSales.length} dari {displayedSales.length} Transaksi)
+                       </h3>
+                       <p className="text-xs text-gray-600 mt-0.5 font-medium">
+                         Catatan transaksi riil cabang {selectedBranch} periode {selectedPeriod === 'today' ? 'hari ini' : selectedPeriod === 'yesterday' ? 'kemarin' : selectedPeriod === '7days' ? '7 hari terakhir' : 'bulan ini'}.
+                       </p>
+                     </div>
+                     
+                     <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                       {/* Input Pencarian */}
+                       <div className="relative flex-1 md:w-64">
+                         <Search className="absolute left-3 top-2.5 text-gray-400" size={16} />
+                         <input
+                           type="text"
+                           placeholder="Cari ID, cabang, nominal..."
+                           value={financeSearch}
+                           onChange={(e) => setFinanceSearch(e.target.value)}
+                           className="w-full pl-9 pr-8 py-2 bg-white border border-gray-300 rounded-lg text-xs font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-500"
+                         />
+                         {financeSearch && (
+                           <button onClick={() => setFinanceSearch("")} className="absolute right-2.5 top-2.5 text-gray-400 hover:text-gray-700">
+                             <X size={14} />
+                           </button>
+                         )}
+                       </div>
+
+                       {/* Filter Metode Pembayaran */}
+                       <div className="flex items-center bg-gray-100 rounded-lg p-1 border border-gray-200 text-xs font-bold">
+                         <button
+                           onClick={() => setFinancePaymentFilter("ALL")}
+                           className={`px-3 py-1.5 rounded-md transition-all ${financePaymentFilter === 'ALL' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                         >
+                           Semua
+                         </button>
+                         <button
+                           onClick={() => setFinancePaymentFilter("CASH")}
+                           className={`px-3 py-1.5 rounded-md transition-all ${financePaymentFilter === 'CASH' ? 'bg-emerald-600 text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                         >
+                           💵 Tunai
+                         </button>
+                         <button
+                           onClick={() => setFinancePaymentFilter("QRIS")}
+                           className={`px-3 py-1.5 rounded-md transition-all ${financePaymentFilter === 'QRIS' ? 'bg-purple-600 text-white shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+                         >
+                           📱 QRIS
+                         </button>
+                       </div>
+
+                       {/* Tombol Export Excel */}
+                       <button 
+                         onClick={handleExportFinanceExcel} 
+                         className="flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-bold shadow-md transition-all shrink-0"
+                         title="Download Laporan Keuangan ke format CSV / Excel"
+                       >
+                         <Download size={15} className="mr-1.5" />
+                         Export Excel
+                       </button>
+                     </div>
+                  </div>
+
                   <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse whitespace-nowrap">
                       <thead>
                         <tr className="bg-gray-100 text-gray-800 text-xs uppercase tracking-wider font-extrabold">
+                          <th className="p-4 font-bold border-b">No</th>
                           <th className="p-4 font-bold border-b">ID Transaksi</th>
                           <th className="p-4 font-bold border-b">Waktu & Tanggal</th>
                           <th className="p-4 font-bold border-b">Cabang</th>
+                          <th className="p-4 font-bold border-b">Metode Pembayaran</th>
                           <th className="p-4 font-bold border-b text-right">Nilai Transaksi</th>
                           <th className="p-4 font-bold border-b text-center">Status</th>
+                          <th className="p-4 font-bold border-b text-center">Aksi</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {displayedSales.map((trx, idx) => (
-                          <tr key={trx.id || idx} className="hover:bg-slate-50 transition-colors">
-                            <td className="p-4 font-mono font-bold text-xs text-blue-700">TRX-{trx.id.slice(0, 8)}</td>
-                            <td className="p-4 text-xs font-semibold text-gray-700">
-                              {new Date(trx.created_at).toLocaleString('id-ID')}
-                            </td>
-                            <td className="p-4 text-xs font-bold text-gray-800">
-                              {(trx.branch_id === 'd0e659b9-0c62-4015-ab1b-265de35bfcd1' || !trx.branch_id) ? 'Tambun 1' : trx.branch_id}
-                            </td>
-                            <td className="p-4 text-right font-black text-sm text-gray-900">
-                              Rp {Number(trx.total_amount).toLocaleString('id-ID')}
-                            </td>
-                            <td className="p-4 text-center">
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-700">
-                                COMPLETED
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                        {displayedSales.length === 0 && (
+                        {filteredFinanceSales.map((trx, idx) => {
+                          const isQris = (trx.payment_method || '').toUpperCase().includes('QRIS');
+                          const branchName = (trx.branch_id === 'd0e659b9-0c62-4015-ab1b-265de35bfcd1' || !trx.branch_id) ? 'Tambun 1' : trx.branch_id;
+                          return (
+                            <tr key={trx.id || idx} className="hover:bg-slate-50 transition-colors">
+                              <td className="p-4 text-xs font-bold text-gray-600">{idx + 1}</td>
+                              <td className="p-4 font-mono font-bold text-xs text-blue-700">
+                                TRX-{String(trx.id || '').slice(0, 8)}
+                              </td>
+                              <td className="p-4 text-xs font-semibold text-gray-700">
+                                {new Date(trx.created_at).toLocaleString('id-ID')}
+                              </td>
+                              <td className="p-4 text-xs font-bold text-gray-800">
+                                {branchName}
+                              </td>
+                              <td className="p-4">
+                                {isQris ? (
+                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-100 text-purple-700 border border-purple-200">
+                                    📱 QRIS
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">
+                                    💵 CASH (Tunai)
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-4 text-right font-black text-sm text-gray-900">
+                                Rp {Number(trx.total_amount).toLocaleString('id-ID')}
+                              </td>
+                              <td className="p-4 text-center">
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-700 border border-green-200">
+                                  COMPLETED
+                                </span>
+                              </td>
+                              <td className="p-4 text-center">
+                                <button
+                                  onClick={() => handleDeleteTransaction(trx)}
+                                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                  title="Hapus / Void Transaksi Ini"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {filteredFinanceSales.length === 0 && (
                           <tr>
-                            <td colSpan={5} className="p-12 text-center text-gray-600 font-bold">
-                              Belum ada riwayat transaksi pada periode dan cabang yang dipilih.
+                            <td colSpan={8} className="p-12 text-center text-gray-600 font-bold">
+                              {displayedSales.length === 0 
+                                ? "Belum ada riwayat transaksi pada periode dan cabang yang dipilih."
+                                : "Tidak ada transaksi yang cocok dengan kriteria pencarian/filter."}
                             </td>
                           </tr>
                         )}
