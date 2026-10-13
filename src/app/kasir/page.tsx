@@ -570,7 +570,7 @@ export default function KasirPage() {
             </div>
           </div>
           <h1 className="text-2xl font-black text-gray-800 mb-2">Login & Absensi</h1>
-          <p className="text-gray-500 mb-8 text-sm">Wajah Anda akan difoto otomatis saat masuk.</p>
+          <p className="text-gray-700 mb-8 text-sm font-semibold">Wajah Anda akan difoto otomatis saat masuk.</p>
           <form onSubmit={handleLogin} className="space-y-6">
             <input
               type="password"
@@ -599,10 +599,10 @@ export default function KasirPage() {
             <Unlock size={40} />
           </div>
           <h1 className="text-2xl font-black text-gray-800 mb-2">Buka Shift</h1>
-          <p className="text-gray-500 mb-8">Halo, {operator?.name}! Masukkan uang modal laci saat ini.</p>
+          <p className="text-gray-700 mb-8 font-semibold">Halo, {operator?.name}! Masukkan uang modal laci saat ini.</p>
           <form onSubmit={handleOpenShift} className="space-y-6">
             <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">Rp</span>
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-700 font-bold text-lg">Rp</span>
               <input
                 type="text"
                 inputMode="numeric"
@@ -632,7 +632,7 @@ export default function KasirPage() {
               <LogOut size={32} />
             </div>
             <h1 className="text-2xl font-black text-gray-800">Tutup Shift</h1>
-            <p className="text-gray-500">Hitung fisik uang di laci Anda sekarang.</p>
+            <p className="text-gray-700 font-semibold">Hitung fisik uang di laci Anda sekarang.</p>
           </div>
           
           <div className="bg-gray-50 rounded-2xl p-4 mb-6 space-y-3 text-sm">
@@ -649,7 +649,7 @@ export default function KasirPage() {
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-2">Uang Tunai Fisik di Laci</label>
               <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">Rp</span>
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-700 font-bold text-lg">Rp</span>
                 <input
                   type="text"
                   inputMode="numeric"
@@ -745,7 +745,7 @@ export default function KasirPage() {
             <button
               onClick={() => setActiveTab("nitrogen")}
               className={`flex-1 py-2.5 md:py-3 text-sm md:text-lg font-bold rounded-lg transition-colors ${
-                activeTab === "nitrogen" ? "bg-blue-600 text-white shadow-md" : "text-gray-500 hover:bg-gray-50"
+                activeTab === "nitrogen" ? "bg-blue-600 text-white shadow-md" : "text-gray-700 font-bold hover:bg-gray-100 hover:text-gray-900"
               }`}
             >
               Layanan Nitrogen
@@ -753,7 +753,7 @@ export default function KasirPage() {
             <button
               onClick={() => setActiveTab("retail")}
               className={`flex-1 py-2.5 md:py-3 text-sm md:text-lg font-bold rounded-lg transition-colors ${
-                activeTab === "retail" ? "bg-blue-600 text-white shadow-md" : "text-gray-500 hover:bg-gray-50"
+                activeTab === "retail" ? "bg-blue-600 text-white shadow-md" : "text-gray-700 font-bold hover:bg-gray-100 hover:text-gray-900"
               }`}
             >
               Ritel & Aksesoris
@@ -774,7 +774,7 @@ export default function KasirPage() {
                         <span className="text-5xl sm:text-7xl">🏍️</span>
                       </div>
                       <span className="font-black text-xl sm:text-2xl text-gray-800">Motor</span>
-                      <span className="text-gray-500 font-medium text-sm mt-1">Pilih layanan Motor</span>
+                      <span className="text-gray-700 font-bold text-sm mt-1">Pilih layanan Motor</span>
                     </button>
                     
                     <button 
@@ -785,7 +785,7 @@ export default function KasirPage() {
                         <span className="text-5xl sm:text-7xl">🚗</span>
                       </div>
                       <span className="font-black text-xl sm:text-2xl text-gray-800">Mobil</span>
-                      <span className="text-gray-500 font-medium text-sm mt-1">Pilih layanan Mobil</span>
+                      <span className="text-gray-700 font-bold text-sm mt-1">Pilih layanan Mobil</span>
                     </button>
                   </div>
                 ) : (
@@ -816,14 +816,14 @@ export default function KasirPage() {
                             </div>
                             <div className="text-left">
                               <span className="font-bold text-gray-800 text-lg md:text-xl block">{product.name}</span>
-                              <span className="text-gray-500 text-sm font-medium">{product.name.toLowerCase().includes('baru') ? 'Pengurasan & Isi Ulang' : product.name.toLowerCase().includes('tambah') ? 'Penambahan Tekanan' : 'Perbaikan Ban Bocor'}</span>
+                              <span className="text-gray-600 text-sm font-semibold">{product.name.toLowerCase().includes('baru') ? 'Pengurasan & Isi Ulang' : product.name.toLowerCase().includes('tambah') ? 'Penambahan Tekanan' : 'Perbaikan Ban Bocor'}</span>
                             </div>
                           </div>
                           <span className="text-blue-600 font-black text-xl">Rp {product.harga.toLocaleString('id-ID')}</span>
                         </button>
                       ))}
                       {products.filter(p => p.category === 'nitrogen').length === 0 && (
-                        <div className="text-center p-8 text-gray-400 font-bold border-2 border-dashed border-gray-200 rounded-2xl">
+                        <div className="text-center p-8 text-gray-600 font-bold border-2 border-dashed border-gray-300 rounded-2xl">
                           Belum ada layanan untuk {vehicleType}.
                         </div>
                       )}
@@ -911,7 +911,7 @@ export default function KasirPage() {
           {/* Cart List */}
           <div className="flex-1 overflow-y-auto p-2 min-h-0">
             {cart.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-gray-300 space-y-3 py-10 md:py-16">
+              <div className="h-full flex flex-col items-center justify-center text-gray-500 font-bold space-y-3 py-10 md:py-16">
                 <ShoppingCart size={48} className="mb-2 md:w-16 md:h-16" />
                 <p className="text-base md:text-lg font-medium">Keranjang Kosong</p>
               </div>
@@ -921,7 +921,7 @@ export default function KasirPage() {
                   <div key={item.id} className="flex justify-between items-center p-2.5 md:p-3 bg-white border border-gray-100 shadow-sm rounded-xl shrink-0">
                     <div className="flex-1 pr-2">
                       <div className="font-bold text-gray-800 text-sm md:text-base leading-tight">{item.name}</div>
-                      <div className="text-xs md:text-sm text-gray-500 font-medium mt-0.5 md:mt-1">Rp {item.harga.toLocaleString('id-ID')} / item</div>
+                      <div className="text-xs md:text-sm text-gray-700 font-bold mt-0.5 md:mt-1">Rp {item.harga.toLocaleString('id-ID')} / item</div>
                     </div>
                     
                     <div className="flex items-center space-x-1 md:space-x-2 shrink-0">
@@ -1011,7 +1011,7 @@ export default function KasirPage() {
                 <CheckCircle size={32} strokeWidth={3} />
               </div>
               <h2 className="text-xl md:text-2xl font-black text-gray-800 tracking-tight">Sedang Dikerjakan...</h2>
-              <p className="text-gray-500 font-medium text-xs md:text-sm">Data tercatat di server. Selesaikan pengerjaan, lalu minta pembayaran ke pelanggan.</p>
+              <p className="text-gray-700 font-semibold text-xs md:text-sm">Data tercatat di server. Selesaikan pengerjaan, lalu minta pembayaran ke pelanggan.</p>
             </div>
             
             {/* Payment Collection Form */}
@@ -1025,7 +1025,7 @@ export default function KasirPage() {
                 <button
                   onClick={() => setPaymentMethod("CASH")}
                   className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${
-                    paymentMethod === "CASH" ? "bg-white text-blue-700 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                    paymentMethod === "CASH" ? "bg-white text-blue-700 shadow-sm font-black" : "text-gray-700 font-bold hover:text-gray-900"
                   }`}
                 >
                   TUNAI
@@ -1033,7 +1033,7 @@ export default function KasirPage() {
                 <button
                   onClick={() => setPaymentMethod("QRIS")}
                   className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${
-                    paymentMethod === "QRIS" ? "bg-white text-blue-700 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                    paymentMethod === "QRIS" ? "bg-white text-blue-700 shadow-sm font-black" : "text-gray-700 font-bold hover:text-gray-900"
                   }`}
                 >
                   QRIS
@@ -1044,7 +1044,7 @@ export default function KasirPage() {
                 <div className="space-y-3">
                   <div className="flex space-x-2">
                     <div className="flex-1 relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">Rp</span>
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-700 font-bold text-sm">Rp</span>
                       <input
                         type="text"
                         inputMode="numeric"
@@ -1055,7 +1055,7 @@ export default function KasirPage() {
                       />
                     </div>
                     <div className="w-[120px] flex flex-col justify-center px-3 bg-gray-200 rounded-xl shrink-0">
-                      <span className="text-[10px] text-gray-500 font-bold uppercase">Kembali</span>
+                      <span className="text-xs text-gray-700 font-extrabold uppercase">Kembali</span>
                       <span className={`font-bold text-base leading-none mt-1 ${kembalian > 0 ? 'text-green-600' : 'text-gray-600'}`}>
                         Rp {kembalian.toLocaleString('id-ID')}
                       </span>

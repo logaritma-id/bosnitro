@@ -600,7 +600,7 @@ export default function OwnerDashboard() {
 
         <header className="bg-white px-8 py-5 border-b shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shrink-0">
           <div>
-            <h2 className="text-2xl font-black text-gray-800 capitalize">
+            <h2 className="text-2xl font-black text-gray-900 capitalize">
               {activeTab === 'overview' && 'Dashboard Executive'}
               {activeTab === 'cabang' && 'Manajemen Cabang'}
               {activeTab === 'audit' && 'Audit CCTV & Log Fraud Telegram'}
@@ -610,7 +610,7 @@ export default function OwnerDashboard() {
               {activeTab === 'keuangan' && 'Laporan Keuangan'}
               {activeTab === 'pengaturan' && 'Pengaturan Sistem'}
             </h2>
-            <p className="text-gray-500 text-sm">
+            <p className="text-gray-700 text-sm font-medium">
               {activeTab === 'overview' ? (
                 selectedBranch === 'Semua Cabang' 
                   ? `Ringkasan operasional 4 cabang periode ${selectedPeriod === 'today' ? 'hari ini' : selectedPeriod === 'yesterday' ? 'kemarin' : selectedPeriod === '7days' ? '7 hari terakhir' : 'bulan ini'}.` 
@@ -620,11 +620,11 @@ export default function OwnerDashboard() {
           </div>
           <div className="flex items-center space-x-3 w-full md:w-auto">
             <div className="flex items-center bg-gray-100 rounded-lg px-3 py-2 border">
-              <Calendar size={16} className="text-gray-500 mr-2 shrink-0" />
+              <Calendar size={16} className="text-gray-700 mr-2 shrink-0" />
               <select 
                 value={selectedPeriod}
                 onChange={(e) => setSelectedPeriod(e.target.value as any)}
-                className="bg-transparent text-sm font-semibold text-gray-700 outline-none w-full md:w-auto cursor-pointer"
+                className="bg-transparent text-sm font-bold text-gray-900 outline-none w-full md:w-auto cursor-pointer"
               >
                 <option value="today">Hari Ini{todayLabel ? ` (${todayLabel})` : ''}</option>
                 <option value="yesterday">Kemarin</option>
@@ -633,11 +633,11 @@ export default function OwnerDashboard() {
               </select>
             </div>
             <div className="flex items-center bg-gray-100 rounded-lg px-3 py-2 border">
-              <Building2 size={16} className="text-gray-500 mr-2 shrink-0" />
+              <Building2 size={16} className="text-gray-700 mr-2 shrink-0" />
               <select 
                 value={selectedBranch}
                 onChange={(e) => setSelectedBranch(e.target.value)}
-                className="bg-transparent text-sm font-semibold text-gray-700 outline-none w-full md:w-auto cursor-pointer"
+                className="bg-transparent text-sm font-bold text-gray-900 outline-none w-full md:w-auto cursor-pointer"
               >
                 <option value="Semua Cabang">Semua Cabang</option>
                 {branchStats.map(b => <option key={b.name} value={b.name}>{b.name}</option>)}
@@ -672,22 +672,22 @@ export default function OwnerDashboard() {
                       </div>
                     </div>
                     <div className="p-5 text-center">
-                       <p className="text-xs text-gray-400 font-semibold mb-1">
+                       <p className="text-xs text-gray-700 font-bold mb-1">
                          Omzet {selectedPeriod === 'today' ? 'Hari Ini' : selectedPeriod === 'yesterday' ? 'Kemarin' : selectedPeriod === '7days' ? '7 Hari' : 'Bulan Ini'}
                        </p>
                        <p className="font-black text-blue-700 text-2xl">Rp {branch.omzet.toLocaleString('id-ID')}</p>
                     </div>
                     <div className="px-5 pb-5 space-y-2">
                        <div className="flex justify-between items-center text-sm">
-                          <span className="text-gray-500 font-medium flex items-center"><span className="w-1.5 h-1.5 bg-blue-400 rounded-full mr-2"></span>Transaksi Nitrogen</span>
+                          <span className="text-gray-700 font-bold flex items-center"><span className="w-1.5 h-1.5 bg-blue-400 rounded-full mr-2"></span>Transaksi Nitrogen</span>
                           <span className="font-bold text-gray-700">{branch.trx}</span>
                        </div>
                        <div className="flex justify-between items-center text-sm">
-                          <span className="text-gray-500 font-medium flex items-center"><span className="w-1.5 h-1.5 bg-blue-400 rounded-full mr-2"></span>Unit Oli Terpotong</span>
+                          <span className="text-gray-700 font-bold flex items-center"><span className="w-1.5 h-1.5 bg-blue-400 rounded-full mr-2"></span>Unit Oli Terpotong</span>
                           <span className="font-bold text-gray-700">{Math.floor(branch.trx * 0.2)}</span>
                        </div>
                        <div className="flex justify-between items-center text-sm pt-1">
-                          <span className="text-gray-500 font-medium flex items-center"><span className="w-1.5 h-1.5 bg-blue-400 rounded-full mr-2"></span>IoT Status</span>
+                          <span className="text-gray-700 font-bold flex items-center"><span className="w-1.5 h-1.5 bg-blue-400 rounded-full mr-2"></span>IoT Status</span>
                           <span className={`font-bold ${branch.status === 'Online' ? 'text-emerald-600' : 'text-red-600'}`}>● {branch.status}</span>
                        </div>
                     </div>
@@ -712,11 +712,11 @@ export default function OwnerDashboard() {
                               <div className="absolute top-1 right-1 bg-black/60 text-[9px] text-white px-1 rounded">CCTV</div>
                            </div>
                            <p className="text-xs font-bold text-blue-800 leading-tight line-clamp-2">{snap.branch} - Trx</p>
-                           <p className="text-[10px] text-gray-500 mt-1">{snap.time}</p>
+                           <p className="text-xs text-gray-700 font-bold mt-1">{snap.time}</p>
                         </div>
                      ))}
                      {displayedSnapshots.length === 0 && (
-                        <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm font-medium">Belum ada tangkapan layar.</div>
+                        <div className="w-full h-full flex items-center justify-center text-gray-600 text-sm font-bold">Belum ada tangkapan layar.</div>
                      )}
                   </div>
                 </div>
@@ -756,7 +756,7 @@ export default function OwnerDashboard() {
                               <span className="inline-flex items-center text-[9px] md:text-[10px] text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full font-bold">
                                  <CheckCircle size={10} className="mr-1" /> Telegram
                               </span>
-                              <span className="text-[10px] text-gray-400 mt-1 font-medium group-hover:text-blue-600">Detail &rarr;</span>
+                              <span className="text-xs text-gray-700 mt-1 font-bold group-hover:text-blue-600">Detail &rarr;</span>
                            </div>
                         </div>
                      ))}
@@ -764,7 +764,7 @@ export default function OwnerDashboard() {
                         <div className="h-full flex flex-col items-center justify-center text-center py-8">
                            <CheckCircle size={28} className="text-emerald-500 mb-2 opacity-80" />
                            <p className="text-xs md:text-sm font-bold text-gray-700">Tidak Ada Fraud Terdeteksi</p>
-                           <p className="text-[11px] text-gray-400 mt-0.5">Semua transaksi & mesin {selectedBranch} berjalan normal.</p>
+                           <p className="text-xs text-gray-700 mt-0.5 font-medium">Semua transaksi & mesin {selectedBranch} berjalan normal.</p>
                         </div>
                      )}
                   </div>
@@ -889,7 +889,7 @@ export default function OwnerDashboard() {
                     </div>
                   ))}
                   {filteredAuditSnapshots.length === 0 && (
-                    <div className="col-span-full py-16 text-center text-gray-400 font-medium">
+                    <div className="col-span-full py-16 text-center text-gray-600 font-bold">
                       Belum ada bukti rekaman CCTV dari transaksi kasir pada periode/cabang ini.
                     </div>
                   )}
@@ -909,7 +909,7 @@ export default function OwnerDashboard() {
                   <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse whitespace-nowrap">
                       <thead>
-                        <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
+                        <tr className="bg-gray-100 text-gray-800 text-xs uppercase tracking-wider font-extrabold">
                           <th className="p-4 font-bold border-b">Waktu & Cabang</th>
                           <th className="p-4 font-bold border-b">Jenis Pelanggaran / Anomali</th>
                           <th className="p-4 font-bold border-b">Kasir Bertugas</th>
@@ -922,7 +922,7 @@ export default function OwnerDashboard() {
                           <tr key={alert.id || idx} className="hover:bg-red-50/30 transition-colors">
                             <td className="p-4">
                               <p className="font-bold text-gray-900 text-sm">{alert.time} WIB</p>
-                              <p className="text-xs text-gray-500 flex items-center mt-0.5">
+                              <p className="text-xs text-gray-700 font-medium flex items-center mt-0.5">
                                 <Building2 size={11} className="mr-1" /> {alert.branch}
                               </p>
                             </td>
@@ -931,7 +931,7 @@ export default function OwnerDashboard() {
                                 <AlertCircle size={14} className="mr-1.5 shrink-0" />
                                 {alert.title}
                               </p>
-                              <p className="text-xs text-gray-500 max-w-md truncate mt-0.5">
+                              <p className="text-xs text-gray-700 font-medium max-w-md truncate mt-0.5">
                                 {alert.description}
                               </p>
                             </td>
@@ -955,7 +955,7 @@ export default function OwnerDashboard() {
                         ))}
                         {filteredAuditFraud.length === 0 && (
                           <tr>
-                            <td colSpan={5} className="p-12 text-center text-gray-400 font-medium">
+                            <td colSpan={5} className="p-12 text-center text-gray-600 font-bold">
                               Tidak ada log peringatan fraud pada cabang dan filter waktu yang dipilih.
                             </td>
                           </tr>
@@ -978,7 +978,7 @@ export default function OwnerDashboard() {
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
+                    <tr className="bg-gray-100 text-gray-800 text-xs uppercase tracking-wider font-extrabold">
                       <th className="p-4 font-bold border-b">Nama Layanan / Barang</th>
                       <th className="p-4 font-bold border-b">Kategori</th>
                       <th className="p-4 font-bold border-b text-right">Harga Jual</th>
@@ -1004,7 +1004,7 @@ export default function OwnerDashboard() {
                           )}
                         </td>
                         <td className="p-4 text-right font-semibold text-gray-700">Rp {prod.harga.toLocaleString('id-ID')}</td>
-                        <td className="p-4 text-right font-semibold text-gray-500">Rp {prod.hpp.toLocaleString('id-ID')}</td>
+                        <td className="p-4 text-right font-bold text-gray-700">Rp {prod.hpp.toLocaleString('id-ID')}</td>
                         <td className="p-4 text-right font-black text-emerald-600">
                           {Math.round(((prod.harga - prod.hpp) / prod.harga) * 100)}%
                         </td>
@@ -1081,7 +1081,7 @@ export default function OwnerDashboard() {
                           </div>
                           <div className="p-2.5">
                             <p className="font-bold text-gray-800 text-xs truncate">{att.cashier}</p>
-                            <p className="text-[10px] text-gray-500 flex items-center mt-0.5">
+                            <p className="text-xs text-gray-700 font-medium flex items-center mt-0.5">
                               <Building2 size={10} className="mr-1 shrink-0" />
                               <span className="truncate">{att.branch}</span>
                             </p>
@@ -1113,7 +1113,7 @@ export default function OwnerDashboard() {
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
+                    <tr className="bg-gray-100 text-gray-800 text-xs uppercase tracking-wider font-extrabold">
                       <th className="p-4 font-bold border-b">Nama Lengkap</th>
                       <th className="p-4 font-bold border-b">PIN Akses</th>
                       <th className="p-4 font-bold border-b">Cabang</th>
@@ -1159,7 +1159,7 @@ export default function OwnerDashboard() {
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse whitespace-nowrap">
                   <thead>
-                    <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
+                    <tr className="bg-gray-100 text-gray-800 text-xs uppercase tracking-wider font-extrabold">
                       <th className="p-4 font-bold border-b">ID Shift</th>
                       <th className="p-4 font-bold border-b">Waktu & Cabang</th>
                       <th className="p-4 font-bold border-b">Kasir</th>
@@ -1172,7 +1172,7 @@ export default function OwnerDashboard() {
                   <tbody className="divide-y divide-gray-100">
                     {displayedShifts.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="p-8 text-center text-gray-400 font-medium">
+                        <td colSpan={7} className="p-8 text-center text-gray-600 font-bold">
                           Belum ada laporan shift yang ditutup hari ini.
                         </td>
                       </tr>
@@ -1182,13 +1182,13 @@ export default function OwnerDashboard() {
                           <td className="p-4 font-bold text-gray-900">{shift.id}</td>
                           <td className="p-4">
                             <div className="font-bold text-gray-800">{shift.date}</div>
-                            <div className="text-xs text-gray-500 font-medium flex items-center mt-1"><Building2 size={10} className="mr-1"/> {shift.branch}</div>
+                            <div className="text-xs text-gray-700 font-bold flex items-center mt-1"><Building2 size={10} className="mr-1"/> {shift.branch}</div>
                           </td>
                           <td className="p-4 font-semibold text-gray-700 flex items-center space-x-2 pt-6">
                              <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-600">{shift.cashier ? shift.cashier[0] : '-'}</div>
                              <span>{shift.cashier}</span>
                           </td>
-                          <td className="p-4 text-right font-medium text-gray-500">Rp {shift.modal.toLocaleString('id-ID')}</td>
+                          <td className="p-4 text-right font-bold text-gray-700">Rp {shift.modal.toLocaleString('id-ID')}</td>
                           <td className="p-4 text-right font-black text-blue-600">Rp {shift.system.toLocaleString('id-ID')}</td>
                           <td className="p-4 text-right font-bold text-gray-900">Rp {shift.physical.toLocaleString('id-ID')}</td>
                           <td className="p-4 text-right">
@@ -1225,7 +1225,7 @@ export default function OwnerDashboard() {
                <div className="overflow-x-auto">
                  <table className="w-full text-left border-collapse whitespace-nowrap">
                     <thead>
-                      <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
+                      <tr className="bg-gray-100 text-gray-800 text-xs uppercase tracking-wider font-extrabold">
                         <th className="p-4 font-bold border-b">Nama Cabang</th>
                         <th className="p-4 font-bold border-b">Node IoT (ESP32)</th>
                         <th className="p-4 font-bold border-b">Status Hardware</th>
@@ -1250,7 +1250,7 @@ export default function OwnerDashboard() {
                                 ● {branch.status}
                               </span>
                               {branch.lastActive && (
-                                <div className="text-[10px] text-gray-500 font-medium mt-1">
+                                <div className="text-xs text-gray-700 font-medium mt-1">
                                   Heartbeat: {branch.lastActive}
                                 </div>
                               )}
@@ -1282,7 +1282,7 @@ export default function OwnerDashboard() {
                <div className="overflow-x-auto">
                  <table className="w-full text-left border-collapse whitespace-nowrap">
                    <thead>
-                     <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
+                     <tr className="bg-gray-100 text-gray-800 text-xs uppercase tracking-wider font-extrabold">
                        <th className="p-4 font-bold border-b">Plat Kendaraan</th>
                        <th className="p-4 font-bold border-b">Kunjungan</th>
                        <th className="p-4 font-bold border-b">Terakhir Kunjung</th>
@@ -1302,7 +1302,7 @@ export default function OwnerDashboard() {
                            <div className="bg-gray-900 text-white px-2 py-1 rounded text-xs inline-block font-mono border-b-2 border-white ring-2 ring-gray-900">{user.plat}</div>
                          </td>
                          <td className="p-4 font-bold text-gray-700">{user.kunjung}x</td>
-                         <td className="p-4 text-sm text-gray-500 font-medium">{user.last}</td>
+                         <td className="p-4 text-sm text-gray-700 font-bold">{user.last}</td>
                          <td className="p-4 text-sm text-gray-600 font-semibold">{user.fav}</td>
                          <td className="p-4 text-right font-black text-blue-600">{user.poin} <span className="text-xs font-normal text-gray-400">pts</span></td>
                        </tr>
@@ -1317,17 +1317,17 @@ export default function OwnerDashboard() {
             <div className="space-y-6">
                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
-                     <p className="text-gray-500 font-bold text-sm mb-1">
+                     <p className="text-gray-700 font-extrabold text-sm mb-1">
                        Total Pemasukan ({selectedPeriod === 'today' ? 'Hari Ini' : selectedPeriod === 'yesterday' ? 'Kemarin' : selectedPeriod === '7days' ? '7 Hari Terakhir' : 'Bulan Ini'})
                      </p>
                      <h2 className="text-3xl font-black text-blue-600">Rp {stats.omzet.toLocaleString('id-ID')}</h2>
                   </div>
                   <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
-                     <p className="text-gray-500 font-bold text-sm mb-1">Total Pengeluaran (HPP Estimasi)</p>
+                     <p className="text-gray-700 font-extrabold text-sm mb-1">Total Pengeluaran (HPP Estimasi)</p>
                      <h2 className="text-3xl font-black text-red-600">Rp {Math.round(stats.omzet * 0.2).toLocaleString('id-ID')}</h2>
                   </div>
                   <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
-                     <p className="text-gray-500 font-bold text-sm mb-1">Laba Bersih Estimasi</p>
+                     <p className="text-gray-700 font-extrabold text-sm mb-1">Laba Bersih Estimasi</p>
                      <h2 className="text-3xl font-black text-emerald-600">Rp {stats.profit.toLocaleString('id-ID')}</h2>
                   </div>
                </div>
@@ -1347,7 +1347,7 @@ export default function OwnerDashboard() {
                   <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse whitespace-nowrap">
                       <thead>
-                        <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
+                        <tr className="bg-gray-100 text-gray-800 text-xs uppercase tracking-wider font-extrabold">
                           <th className="p-4 font-bold border-b">ID Transaksi</th>
                           <th className="p-4 font-bold border-b">Waktu & Tanggal</th>
                           <th className="p-4 font-bold border-b">Cabang</th>
@@ -1377,7 +1377,7 @@ export default function OwnerDashboard() {
                         ))}
                         {displayedSales.length === 0 && (
                           <tr>
-                            <td colSpan={5} className="p-12 text-center text-gray-400 font-medium">
+                            <td colSpan={5} className="p-12 text-center text-gray-600 font-bold">
                               Belum ada riwayat transaksi pada periode dan cabang yang dipilih.
                             </td>
                           </tr>
@@ -1402,12 +1402,12 @@ export default function OwnerDashboard() {
                            ● Terhubung
                          </span>
                        </div>
-                       <p className="text-xs text-gray-400 mt-1">Grup Chat ID Owner: -10023481920 (Live Broadcast Dispatch)</p>
+                       <p className="text-xs text-gray-700 font-medium mt-1">Grup Chat ID Owner: -10023481920 (Live Broadcast Dispatch)</p>
                     </div>
                     <div>
                        <label className="block text-sm font-bold text-gray-700 mb-2">URL Database Supabase</label>
                        <input type="text" value="https://qxvgciwufwvchgfapjyk.supabase.co" disabled className="w-full border rounded-lg px-4 py-2 bg-gray-100 text-gray-500 cursor-not-allowed font-mono text-sm" />
-                       <p className="text-xs text-gray-400 mt-1">Hanya dapat diubah dari Environment Variables</p>
+                       <p className="text-xs text-gray-700 font-medium mt-1">Hanya dapat diubah dari Environment Variables</p>
                     </div>
                     <div>
                        <label className="block text-sm font-bold text-gray-700 mb-2">Nama Perusahaan (Header Struk)</label>
@@ -1419,14 +1419,14 @@ export default function OwnerDashboard() {
                           <input type="checkbox" defaultChecked className="w-5 h-5 text-blue-600 rounded" />
                           <div>
                             <p className="font-bold text-gray-800">Otomatis Kunci Kasir (Idle)</p>
-                            <p className="text-xs text-gray-500">Minta PIN kembali setelah 5 menit tidak ada aktivitas</p>
+                            <p className="text-xs text-gray-700 font-medium">Minta PIN kembali setelah 5 menit tidak ada aktivitas</p>
                           </div>
                        </label>
                        <label className="flex items-center space-x-3 cursor-pointer">
                           <input type="checkbox" defaultChecked className="w-5 h-5 text-blue-600 rounded" />
                           <div>
                             <p className="font-bold text-gray-800">Wajib Print Struk</p>
-                            <p className="text-xs text-gray-500">Printer bluetooth harus terhubung untuk transaksi sukses</p>
+                            <p className="text-xs text-gray-700 font-medium">Printer bluetooth harus terhubung untuk transaksi sukses</p>
                           </div>
                        </label>
                     </div>
@@ -1443,28 +1443,28 @@ export default function OwnerDashboard() {
 
       {/* Add Product Modal */}
       {showProductModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
-            <h3 className="font-bold text-lg mb-4">{newProduct.id ? 'Edit Produk' : 'Tambah Produk Baru'}</h3>
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 border border-gray-200 text-gray-900">
+            <h3 className="font-extrabold text-xl mb-4 text-gray-900">{newProduct.id ? 'Edit Produk' : 'Tambah Produk Baru'}</h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">Nama Produk</label>
-                <input type="text" className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} />
+                <label className="block text-sm font-bold text-gray-800 mb-1">Nama Produk</label>
+                <input type="text" className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900 bg-white" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} />
               </div>
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">Kategori Produk</label>
+                <label className="block text-sm font-bold text-gray-800 mb-2">Kategori Produk</label>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
                     onClick={() => setNewProduct({...newProduct, category: 'nitrogen'})}
-                    className={`p-3 rounded-xl border-2 font-bold text-sm transition-all flex items-center justify-center space-x-2 ${newProduct.category === 'nitrogen' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                    className={`p-3 rounded-xl border-2 text-sm transition-all flex items-center justify-center space-x-2 ${newProduct.category === 'nitrogen' ? 'border-blue-600 bg-blue-50 text-blue-900 font-extrabold shadow-sm' : 'border-gray-300 bg-gray-50 text-gray-700 hover:border-gray-400 font-bold'}`}
                   >
                     <span>⚗️</span><span>Layanan Nitrogen</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setNewProduct({...newProduct, category: 'ritel'})}
-                    className={`p-3 rounded-xl border-2 font-bold text-sm transition-all flex items-center justify-center space-x-2 ${newProduct.category === 'ritel' ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                    className={`p-3 rounded-xl border-2 text-sm transition-all flex items-center justify-center space-x-2 ${newProduct.category === 'ritel' ? 'border-purple-600 bg-purple-50 text-purple-900 font-extrabold shadow-sm' : 'border-gray-300 bg-gray-50 text-gray-700 hover:border-gray-400 font-bold'}`}
                   >
                     <span>🛒</span><span>Ritel & Aksesoris</span>
                   </button>
@@ -1472,22 +1472,22 @@ export default function OwnerDashboard() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1">Harga Jual</label>
-                  <input type="number" className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900" value={newProduct.harga} onChange={e => setNewProduct({...newProduct, harga: parseInt(e.target.value) || 0})} />
+                  <label className="block text-sm font-bold text-gray-800 mb-1">Harga Jual</label>
+                  <input type="number" className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900 bg-white" value={newProduct.harga} onChange={e => setNewProduct({...newProduct, harga: parseInt(e.target.value) || 0})} />
                 </div>
                 <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1">HPP (Modal)</label>
-                  <input type="number" className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900" value={newProduct.hpp} onChange={e => setNewProduct({...newProduct, hpp: parseInt(e.target.value) || 0})} />
+                  <label className="block text-sm font-bold text-gray-800 mb-1">HPP (Modal)</label>
+                  <input type="number" className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900 bg-white" value={newProduct.hpp} onChange={e => setNewProduct({...newProduct, hpp: parseInt(e.target.value) || 0})} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1">Stok Fisik</label>
-                  <input type="number" className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900" value={newProduct.stok} onChange={e => setNewProduct({...newProduct, stok: parseInt(e.target.value) || 0})} />
+                  <label className="block text-sm font-bold text-gray-800 mb-1">Stok Fisik</label>
+                  <input type="number" className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900 bg-white" value={newProduct.stok} onChange={e => setNewProduct({...newProduct, stok: parseInt(e.target.value) || 0})} />
                 </div>
                 <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1">Foto Produk</label>
-                  <input type="file" accept="image/*" className="w-full text-sm" onChange={(e) => {
+                  <label className="block text-sm font-bold text-gray-800 mb-1">Foto Produk</label>
+                  <input type="file" accept="image/*" className="w-full text-xs font-bold text-gray-800 border-2 border-gray-300 rounded-lg p-2 bg-gray-50 file:mr-2 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-bold file:bg-slate-900 file:text-white hover:file:bg-slate-800 cursor-pointer" onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) {
                       const reader = new FileReader();
@@ -1654,19 +1654,19 @@ export default function OwnerDashboard() {
               {/* Info Grid */}
               <div className="grid grid-cols-2 gap-3 bg-gray-50 p-3 rounded-xl border border-gray-100 text-xs">
                 <div>
-                  <p className="text-gray-400 font-semibold">Cabang Lokasi</p>
+                  <p className="text-gray-700 font-bold text-xs uppercase tracking-wide">Cabang Lokasi</p>
                   <p className="font-bold text-gray-800 text-sm mt-0.5">{selectedFraudModal.branch}</p>
                 </div>
                 <div>
-                  <p className="text-gray-400 font-semibold">Waktu Deteksi</p>
+                  <p className="text-gray-700 font-bold text-xs uppercase tracking-wide">Waktu Deteksi</p>
                   <p className="font-bold text-gray-800 text-sm mt-0.5">{selectedFraudModal.time} WIB</p>
                 </div>
                 <div>
-                  <p className="text-gray-400 font-semibold">Kasir Bertugas</p>
+                  <p className="text-gray-700 font-bold text-xs uppercase tracking-wide">Kasir Bertugas</p>
                   <p className="font-bold text-gray-800 mt-0.5">{selectedFraudModal.cashier || 'Kasir'}</p>
                 </div>
                 <div>
-                  <p className="text-gray-400 font-semibold">Status Notifikasi</p>
+                  <p className="text-gray-700 font-bold text-xs uppercase tracking-wide">Status Notifikasi</p>
                   <p className="font-bold text-emerald-600 mt-0.5 flex items-center">
                     <CheckCircle size={12} className="mr-1" /> Terkirim ke Telegram
                   </p>
@@ -1751,7 +1751,7 @@ export default function OwnerDashboard() {
             <div className="flex justify-between items-center mb-4">
               <div>
                 <h3 className="font-bold text-lg text-gray-800">Konfigurasi Node IoT: {selectedBranchConfig.name}</h3>
-                <p className="text-xs text-gray-400">Sinkronisasi Hardware ESP32 & Solenoid Valve</p>
+                <p className="text-xs text-gray-700 font-bold">Sinkronisasi Hardware ESP32 & Solenoid Valve</p>
               </div>
               <button onClick={() => setSelectedBranchConfig(null)} className="text-gray-400 hover:text-gray-600">
                 <X size={20} />
@@ -1780,17 +1780,17 @@ export default function OwnerDashboard() {
               {/* Status Hardware Real-time Box */}
               <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs">
                 <div className="flex justify-between items-center mb-1.5">
-                  <span className="text-gray-500 font-medium">Status Real Perangkat:</span>
+                  <span className="text-gray-800 font-bold">Status Real Perangkat:</span>
                   <span className={`px-2 py-0.5 rounded-full font-bold text-[11px] ${selectedBranchConfig.status === 'Online' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
                     ● {selectedBranchConfig.status || 'Offline'}
                   </span>
                 </div>
                 <div className="flex justify-between items-center mb-1.5">
-                  <span className="text-gray-500 font-medium">Device Relay State:</span>
+                  <span className="text-gray-800 font-bold">Device Relay State:</span>
                   <span className="font-mono font-bold text-gray-800">{selectedBranchConfig.deviceStatus || 'IDLE'}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-500 font-medium">Heartbeat Terakhir:</span>
+                  <span className="text-gray-800 font-bold">Heartbeat Terakhir:</span>
                   <span className="font-semibold text-gray-700">{selectedBranchConfig.lastActive || 'Belum ada heartbeat'}</span>
                 </div>
               </div>
@@ -1806,7 +1806,7 @@ export default function OwnerDashboard() {
               <div className="flex items-center justify-between pt-1">
                 <div>
                   <p className="font-bold text-gray-800 text-sm">Status Cabang Aktif</p>
-                  <p className="text-xs text-gray-500">Nonaktifkan untuk perawatan berkala</p>
+                  <p className="text-xs text-gray-700 font-medium">Nonaktifkan untuk perawatan berkala</p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input type="checkbox" checked={selectedBranchConfig.status === 'Online'} onChange={(e) => setSelectedBranchConfig({...selectedBranchConfig, status: e.target.checked ? 'Online' : 'Offline'})} className="sr-only peer" />
