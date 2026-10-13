@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { 
   LayoutDashboard, 
   Camera, 
@@ -29,9 +29,29 @@ import {
   Save,
   RotateCcw,
   Printer,
-  ScanLine
+  ScanLine,
+  Award,
+  Target,
+  Percent,
+  TrendingDown,
+  Sparkles,
+  HelpCircle,
+  Edit3
 } from "lucide-react";
-import { getProducts, saveProducts, getOperators, saveOperators, getBranches, saveBranches, getCustomers, saveCustomers } from "../../lib/localDb";
+import { 
+  getProducts, 
+  saveProducts, 
+  getOperators, 
+  saveOperators, 
+  getBranches, 
+  saveBranches, 
+  getCustomers, 
+  saveCustomers,
+  getKpiSettings,
+  saveKpiSettings,
+  DEFAULT_KPI_SETTINGS,
+  KPISettings 
+} from "../../lib/localDb";
 import { supabase } from "@/lib/supabase";
 
 // Helper untuk filter rentang tanggal/hari
@@ -188,7 +208,15 @@ export default function OwnerDashboard() {
   const [scannedBarcode, setScannedBarcode] = useState("");
   const [scannedProductResult, setScannedProductResult] = useState<any | null>(null);
   const [showOperatorModal, setShowOperatorModal] = useState(false);
-  const [newOperator, setNewOperator] = useState<{id?: number, name: string, pin: string, branch: string}>({ name: '', pin: '', branch: '' });
+  const [newOperator, setNewOperator] = useState<{id?: number, name: string, pin: string, branch: string, role?: string, baseCommissionRate?: number}>({ name: '', pin: '', branch: '', role: 'Operator', baseCommissionRate: 5 });
+  const [kpiSettings, setKpiSettings] = useState<KPISettings>(DEFAULT_KPI_SETTINGS);
+  const [showKpiSettingsModal, setShowKpiSettingsModal] = useState(false);
+  const [editingKpiSettings, setEditingKpiSettings] = useState<KPISettings>(DEFAULT_KPI_SETTINGS);
+  const [showKpiSimulation, setShowKpiSimulation] = useState(false);
+  const [simulationDailyAvg, setSimulationDailyAvg] = useState(300000);
+  const [kpiBranchFilter, setKpiBranchFilter] = useState("Semua Cabang");
+  const [kpiRoleFilter, setKpiRoleFilter] = useState<"ALL" | "Operator" | "Supervisor">("ALL");
+  const [currentDayOfMonth, setCurrentDayOfMonth] = useState(1);
   const [selectedBranchConfig, setSelectedBranchConfig] = useState<any>(null);
   const [customers, setCustomers] = useState<any[]>([]);
   const [crmSearch, setCrmSearch] = useState("");
@@ -402,9 +430,11 @@ export default function OwnerDashboard() {
   // Load from LocalDB on Mount & Supabase Live Sync
   useEffect(() => {
     setTodayLabel(new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'short' }));
+    setCurrentDayOfMonth(Math.max(1, new Date().getDate()));
     setProducts(getProducts());
     setOperators(getOperators());
     setBranchStats(getBranches());
+    setKpiSettings(getKpiSettings());
     
     // Load System Settings dari localStorage jika ada
     try {
@@ -526,6 +556,7 @@ export default function OwnerDashboard() {
         if (event.data.payload.entity === 'operators') setOperators(getOperators());
         if (event.data.payload.entity === 'branchStats') setBranchStats(getBranches());
         if (event.data.payload.entity === 'customers') setCustomers(getCustomers());
+        if (event.data.payload.entity === 'kpiSettings') setKpiSettings(getKpiSettings());
       }
     };
     return () => channel.close();
@@ -582,6 +613,180 @@ export default function OwnerDashboard() {
     const amountStr = String(trx.total_amount || '');
     return idStr.includes(q) || branchStr.includes(q) || methodStr.includes(q) || amountStr.includes(q);
   });
+
+  // --- KALKULASI EVALUASI KINERJA & SKEMA KOMISI KARYAWAN (KPI OTOMATIS) ---
+  const kpiEvaluations = useMemo(() => {
+    // Tentukan hari pembagi rata-rata berdasarkan periode dashboard
+    const periodDays = selectedPeriod === 'today' ? 1 
+      : selectedPeriod === 'yesterday' ? 1 
+      : selectedPeriod === '7days' ? 7 
+      : currentDayOfMonth;
+
+    // Transaksi completed pada periode yang dipilih
+    const completedTrx = rawTransactions.filter(t => isWithinPeriod(t.created_at, selectedPeriod) && t.payment_status === 'COMPLETED');
+
+    // Ringkasan KPI per Cabang
+    const branchSummaries = branchStats.map(branch => {
+      const customConfig = kpiSettings.branchTargets?.[branch.name];
+      const monthlyTarget = customConfig?.monthlyTarget || kpiSettings.monthlyTarget; // Default 15.000.000
+      const dailyTarget = customConfig?.dailyTarget || kpiSettings.dailyTarget; // Default 500.000 (15jt / 30 hari)
+      const thresholdDaily = customConfig?.thresholdDaily || kpiSettings.thresholdDaily; // Benchmark 250.000
+
+      // Penjualan cabang ini
+      const bSales = completedTrx.filter(t => {
+        const bName = (t.branch_id === 'd0e659b9-0c62-4015-ab1b-265de35bfcd1' || !t.branch_id) ? 'Tambun 1' : t.branch_id;
+        return bName.toLowerCase() === branch.name.toLowerCase();
+      });
+
+      const totalOmzet = bSales.reduce((sum, t) => sum + Number(t.total_amount || 0), 0);
+      const totalTrxCount = bSales.length;
+
+      // Realisasi rata-rata omset per hari
+      const dailyAvg = periodDays > 0 ? Math.round(totalOmzet / periodDays) : 0;
+
+      // Status KPI sesuai aturan user:
+      // - Rata-rata >= 250rb/hari -> Memenuhi Standar (+25% Komisi: +15% Operator & +10% SPV)
+      // - Rata-rata < 250rb/hari -> Di Bawah Standar (-25% Potongan: -15% Operator & -10% SPV)
+      const isTargetMet = dailyAvg >= thresholdDaily;
+      const targetAchievementPct = dailyTarget > 0 ? Math.min(200, Math.round((dailyAvg / dailyTarget) * 100)) : 0;
+
+      return {
+        branchName: branch.name,
+        status: branch.status,
+        totalOmzet,
+        totalTrxCount,
+        periodDays,
+        dailyAvg,
+        monthlyTarget,
+        dailyTarget,
+        thresholdDaily,
+        isTargetMet,
+        targetAchievementPct,
+        operatorAdjustmentRate: kpiSettings.operatorAdjustmentRate, // 15%
+        supervisorAdjustmentRate: kpiSettings.supervisorAdjustmentRate, // 10%
+      };
+    });
+
+    // Evaluasi Komisi per Karyawan (Operator Kasir & Supervisor SPV)
+    const employeeEvaluations = operators.map(op => {
+      const role: "Operator" | "Supervisor" = op.role === 'Supervisor' || (op.name && (op.name.toLowerCase().includes('spv') || op.name.toLowerCase().includes('supervisor')))
+        ? 'Supervisor'
+        : 'Operator';
+
+      const branchSummary = branchSummaries.find(b => b.branchName.toLowerCase() === (op.branch || '').toLowerCase()) || {
+        branchName: op.branch || '-',
+        status: 'Online',
+        totalOmzet: 0,
+        totalTrxCount: 0,
+        dailyAvg: 0,
+        dailyTarget: kpiSettings.dailyTarget,
+        monthlyTarget: kpiSettings.monthlyTarget,
+        thresholdDaily: kpiSettings.thresholdDaily,
+        isTargetMet: false,
+        periodDays,
+        targetAchievementPct: 0,
+        operatorAdjustmentRate: kpiSettings.operatorAdjustmentRate,
+        supervisorAdjustmentRate: kpiSettings.supervisorAdjustmentRate,
+      };
+
+      // Komisi Dasar Rate (%)
+      const baseRate = op.baseCommissionRate !== undefined 
+        ? Number(op.baseCommissionRate) 
+        : (role === 'Supervisor' ? kpiSettings.supervisorBaseRate : kpiSettings.operatorBaseRate);
+
+      // Nilai Komisi Dasar dari omset cabang
+      const baseCommission = Math.round(branchSummary.totalOmzet * (baseRate / 100));
+
+      // Persentase Penyesuaian Komisi:
+      // Operator: 15%
+      // Supervisor: 10%
+      // Total penyesuaian: 25% (15% + 10%)
+      const adjRate = role === 'Supervisor' ? kpiSettings.supervisorAdjustmentRate : kpiSettings.operatorAdjustmentRate;
+
+      // Evaluasi:
+      // Jika branchSummary.isTargetMet (rata2 >= 250rb) -> TAMBAHAN / BONUS (+), jika tidak -> POTONGAN (-)
+      const isBonus = branchSummary.isTargetMet;
+      const adjustmentAmount = Math.round(baseCommission * (adjRate / 100));
+      const netCommission = isBonus 
+        ? baseCommission + adjustmentAmount 
+        : Math.max(0, baseCommission - adjustmentAmount);
+
+      return {
+        id: op.id,
+        name: op.name,
+        pin: op.pin,
+        branch: op.branch,
+        role,
+        baseRate,
+        baseCommission,
+        branchOmzet: branchSummary.totalOmzet,
+        branchDailyAvg: branchSummary.dailyAvg,
+        dailyTarget: branchSummary.dailyTarget,
+        monthlyTarget: branchSummary.monthlyTarget,
+        thresholdDaily: branchSummary.thresholdDaily,
+        isTargetMet: branchSummary.isTargetMet,
+        isBonus,
+        adjRate,
+        adjustmentAmount,
+        netCommission,
+      };
+    });
+
+    return {
+      periodDays,
+      branchSummaries,
+      employeeEvaluations,
+    };
+  }, [rawTransactions, branchStats, operators, selectedPeriod, kpiSettings, currentDayOfMonth]);
+
+  // Handler Export Laporan Evaluasi KPI & Komisi ke CSV / Excel
+  const handleExportKpiExcel = () => {
+    const headers = [
+      "ID Karyawan",
+      "Nama Karyawan",
+      "Jabatan",
+      "Cabang",
+      "Omzet Cabang Periode (Rp)",
+      "Rata-rata Omzet Harian (Rp)",
+      "Target Harian (Rp)",
+      "Ambang Batas KPI (Rp)",
+      "Status Evaluasi",
+      "Komisi Dasar Rate (%)",
+      "Komisi Dasar (Rp)",
+      "Skema Penyesuaian Rate (%)",
+      "Nilai Penyesuaian (Rp)",
+      "Total Komisi Bersih Diterima (Rp)"
+    ];
+
+    const rows = kpiEvaluations.employeeEvaluations.map(emp => [
+      emp.id,
+      `"${emp.name.replace(/"/g, '""')}"`,
+      emp.role,
+      `"${emp.branch}"`,
+      emp.branchOmzet,
+      emp.branchDailyAvg,
+      emp.dailyTarget,
+      emp.thresholdDaily,
+      emp.isBonus ? "Target Tercapai (+25% Skema Bonus)" : "Di Bawah Standar (-25% Skema Potongan)",
+      `${emp.baseRate}%`,
+      emp.baseCommission,
+      emp.isBonus ? `+${emp.adjRate}%` : `-${emp.adjRate}%`,
+      emp.isBonus ? emp.adjustmentAmount : -emp.adjustmentAmount,
+      emp.netCommission
+    ]);
+
+    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" 
+      + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+    
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Laporan_KPI_Komisi_Karyawan_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
 
   // Handler untuk menghapus satu catatan absensi
   const handleDeleteAttendance = async (att: any) => {
@@ -1794,6 +1999,480 @@ export default function OwnerDashboard() {
           {/* TAB 4: KARYAWAN & SHIFT */}
           {activeTab === "karyawan" && (
             <div className="space-y-6">
+              {/* SISTEM EVALUASI KINERJA & SKEMA KOMISI KARYAWAN (KPI OTOMATIS) */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="p-5 border-b bg-gradient-to-r from-slate-900 via-blue-950 to-indigo-900 text-white flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                  <div>
+                    <div className="flex items-center space-x-2.5">
+                      <div className="p-2 bg-yellow-400/20 text-yellow-400 rounded-xl border border-yellow-400/30">
+                        <Award size={22} className="text-yellow-400" />
+                      </div>
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <h3 className="font-extrabold text-lg text-white">Sistem Evaluasi Kinerja & Komisi Karyawan (KPI Otomatis)</h3>
+                          <span className="bg-emerald-500/20 text-emerald-300 text-[11px] font-extrabold px-2 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1">
+                            <Sparkles size={11} /> Auto-Calculated
+                          </span>
+                        </div>
+                        <p className="text-xs text-blue-200 font-medium mt-0.5">
+                          Perhitungan otomatis insentif bonus & potongan komisi (+/- 25%) berbasis rata-rata omzet harian cabang
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 self-stretch md:self-auto">
+                    <button
+                      onClick={() => setShowKpiSimulation(!showKpiSimulation)}
+                      className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 border ${
+                        showKpiSimulation 
+                          ? 'bg-yellow-400 text-slate-950 border-yellow-300 shadow-md' 
+                          : 'bg-white/10 hover:bg-white/20 text-white border-white/20'
+                      }`}
+                      title="Buka / Tutup kalkulator simulasi skenario omzet"
+                    >
+                      <Percent size={14} />
+                      <span>{showKpiSimulation ? 'Tutup Simulasi' : 'Kalkulator Simulasi'}</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingKpiSettings({ ...kpiSettings });
+                        setShowKpiSettingsModal(true);
+                      }}
+                      className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 border border-blue-400/40 shadow-sm"
+                      title="Atur target omzet cabang dan formula potongan / bonus"
+                    >
+                      <Settings size={14} />
+                      <span>Atur Target & Skema</span>
+                    </button>
+                    <button
+                      onClick={handleExportKpiExcel}
+                      className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 border border-emerald-400/40 shadow-sm"
+                      title="Unduh laporan lengkap KPI dan komisi karyawan periode ini"
+                    >
+                      <Download size={14} />
+                      <span>Export Excel</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* FORMULA & ATURAN AKTIF HIGHLIGHT BANNER */}
+                <div className="bg-slate-50 border-b border-gray-200 p-4 sm:p-5">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-xs flex items-start space-x-3">
+                      <div className="p-2 bg-blue-50 text-blue-600 rounded-lg shrink-0 mt-0.5">
+                        <Target size={18} />
+                      </div>
+                      <div>
+                        <div className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">Target Cabang Owner</div>
+                        <div className="text-base font-extrabold text-gray-900 mt-0.5">
+                          Rp {kpiSettings.monthlyTarget.toLocaleString('id-ID')} <span className="text-xs font-medium text-gray-700">/ bln</span>
+                        </div>
+                        <div className="text-xs text-blue-600 font-bold mt-0.5">
+                          Rp {kpiSettings.dailyTarget.toLocaleString('id-ID')} / hari (standar 30 hari)
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-xs flex items-start space-x-3">
+                      <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg shrink-0 mt-0.5">
+                        <TrendingUp size={18} />
+                      </div>
+                      <div>
+                        <div className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">Aturan Bonus (Rata-rata &ge; Rp {kpiSettings.thresholdDaily.toLocaleString('id-ID')})</div>
+                        <div className="text-base font-extrabold text-emerald-700 mt-0.5">
+                          Tambahan Komisi +{kpiSettings.operatorAdjustmentRate + kpiSettings.supervisorAdjustmentRate}%
+                        </div>
+                        <div className="text-xs text-gray-700 font-semibold mt-0.5">
+                          +{kpiSettings.operatorAdjustmentRate}% Operator (Kasir) &bull; +{kpiSettings.supervisorAdjustmentRate}% Supervisor (SPV)
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-xs flex items-start space-x-3">
+                      <div className="p-2 bg-rose-50 text-rose-600 rounded-lg shrink-0 mt-0.5">
+                        <TrendingDown size={18} />
+                      </div>
+                      <div>
+                        <div className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">Aturan Potongan (Rata-rata &lt; Rp {kpiSettings.thresholdDaily.toLocaleString('id-ID')})</div>
+                        <div className="text-base font-extrabold text-rose-700 mt-0.5">
+                          Potongan Komisi -{kpiSettings.operatorAdjustmentRate + kpiSettings.supervisorAdjustmentRate}%
+                        </div>
+                        <div className="text-xs text-gray-700 font-semibold mt-0.5">
+                          -{kpiSettings.operatorAdjustmentRate}% Operator (Kasir) &bull; -{kpiSettings.supervisorAdjustmentRate}% Supervisor (SPV)
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* KALKULATOR SIMULASI SKENARIO OMZET */}
+                {showKpiSimulation && (
+                  <div className="bg-gradient-to-r from-amber-50/70 via-yellow-50/50 to-orange-50/60 p-5 border-b border-yellow-200">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center space-x-2">
+                        <Percent size={18} className="text-amber-600" />
+                        <h4 className="font-extrabold text-gray-900 text-sm">Kalkulator Simulasi Perhitungan Kinerja & Komisi</h4>
+                      </div>
+                      <span className="text-xs font-bold text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-full border border-amber-300">
+                        Mode Pengujian Owner
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-center">
+                      <div className="lg:col-span-5 bg-white p-4 rounded-xl border border-amber-200 shadow-xs">
+                        <label className="block text-xs font-extrabold text-gray-700 mb-2">
+                          Simulasikan Rata-rata Omset Harian Cabang:
+                        </label>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-sm font-bold text-gray-500">Rp</span>
+                          <input
+                            type="number"
+                            value={simulationDailyAvg}
+                            onChange={(e) => setSimulationDailyAvg(Math.max(0, Number(e.target.value)))}
+                            className="w-full font-black text-lg text-gray-900 border-2 border-amber-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                            placeholder="Contoh: 300000"
+                          />
+                        </div>
+                        <div className="flex gap-2 mt-2">
+                          <button
+                            type="button"
+                            onClick={() => setSimulationDailyAvg(200000)}
+                            className="text-[11px] font-bold px-2 py-1 bg-rose-50 text-rose-700 border border-rose-200 rounded-md hover:bg-rose-100 transition-all cursor-pointer"
+                          >
+                            Uji Rp 200rb (Di Bawah Target)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSimulationDailyAvg(300000)}
+                            className="text-[11px] font-bold px-2 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md hover:bg-emerald-100 transition-all cursor-pointer"
+                          >
+                            Uji Rp 300rb (Target Tercapai)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSimulationDailyAvg(500000)}
+                            className="text-[11px] font-bold px-2 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-md hover:bg-blue-100 transition-all cursor-pointer"
+                          >
+                            Uji Rp 500rb (Target Penuh)
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {/* Hasil Simulasi Operator */}
+                        {(() => {
+                          const isMet = simulationDailyAvg >= kpiSettings.thresholdDaily;
+                          const simMonthlyOmzet = simulationDailyAvg * 30;
+                          const baseKomisi = Math.round(simMonthlyOmzet * (kpiSettings.operatorBaseRate / 100));
+                          const adjNominal = Math.round(baseKomisi * (kpiSettings.operatorAdjustmentRate / 100));
+                          const netKomisi = isMet ? baseKomisi + adjNominal : Math.max(0, baseKomisi - adjNominal);
+                          return (
+                            <div className={`p-4 rounded-xl border ${isMet ? 'bg-emerald-50/80 border-emerald-200' : 'bg-rose-50/80 border-rose-200'}`}>
+                              <div className="flex justify-between items-center">
+                                <span className="font-extrabold text-xs text-gray-900">Peran: Operator (Kasir)</span>
+                                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${isMet ? 'bg-emerald-200 text-emerald-800' : 'bg-rose-200 text-rose-800'}`}>
+                                  {isMet ? `+${kpiSettings.operatorAdjustmentRate}% BONUS` : `-${kpiSettings.operatorAdjustmentRate}% POTONGAN`}
+                                </span>
+                              </div>
+                              <div className="mt-2 text-xs text-gray-600 space-y-1">
+                                <div className="flex justify-between">
+                                  <span>Komisi Dasar ({kpiSettings.operatorBaseRate}%):</span>
+                                  <span className="font-bold">Rp {baseKomisi.toLocaleString('id-ID')}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span>Penyesuaian ({isMet ? '+' : '-'}{kpiSettings.operatorAdjustmentRate}%):</span>
+                                  <span className={`font-bold ${isMet ? 'text-emerald-700' : 'text-rose-700'}`}>
+                                    {isMet ? '+' : '-'}Rp {adjNominal.toLocaleString('id-ID')}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="mt-3 pt-2 border-t border-gray-200 flex justify-between items-center">
+                                <span className="text-xs font-bold text-gray-800">Komisi Bersih:</span>
+                                <span className="text-base font-black text-gray-900">Rp {netKomisi.toLocaleString('id-ID')}</span>
+                              </div>
+                            </div>
+                          );
+                        })()}
+
+                        {/* Hasil Simulasi Supervisor */}
+                        {(() => {
+                          const isMet = simulationDailyAvg >= kpiSettings.thresholdDaily;
+                          const simMonthlyOmzet = simulationDailyAvg * 30;
+                          const baseKomisi = Math.round(simMonthlyOmzet * (kpiSettings.supervisorBaseRate / 100));
+                          const adjNominal = Math.round(baseKomisi * (kpiSettings.supervisorAdjustmentRate / 100));
+                          const netKomisi = isMet ? baseKomisi + adjNominal : Math.max(0, baseKomisi - adjNominal);
+                          return (
+                            <div className={`p-4 rounded-xl border ${isMet ? 'bg-purple-50/80 border-purple-200' : 'bg-rose-50/80 border-rose-200'}`}>
+                              <div className="flex justify-between items-center">
+                                <span className="font-extrabold text-xs text-gray-900">Peran: Supervisor (SPV)</span>
+                                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${isMet ? 'bg-purple-200 text-purple-800' : 'bg-rose-200 text-rose-800'}`}>
+                                  {isMet ? `+${kpiSettings.supervisorAdjustmentRate}% BONUS` : `-${kpiSettings.supervisorAdjustmentRate}% POTONGAN`}
+                                </span>
+                              </div>
+                              <div className="mt-2 text-xs text-gray-600 space-y-1">
+                                <div className="flex justify-between">
+                                  <span>Komisi Dasar ({kpiSettings.supervisorBaseRate}%):</span>
+                                  <span className="font-bold">Rp {baseKomisi.toLocaleString('id-ID')}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span>Penyesuaian ({isMet ? '+' : '-'}{kpiSettings.supervisorAdjustmentRate}%):</span>
+                                  <span className={`font-bold ${isMet ? 'text-purple-700' : 'text-rose-700'}`}>
+                                    {isMet ? '+' : '-'}Rp {adjNominal.toLocaleString('id-ID')}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="mt-3 pt-2 border-t border-gray-200 flex justify-between items-center">
+                                <span className="text-xs font-bold text-gray-800">Komisi Bersih:</span>
+                                <span className="text-base font-black text-gray-900">Rp {netKomisi.toLocaleString('id-ID')}</span>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* KARTU REALISASI KINERJA PER CABANG */}
+                <div className="p-5 border-b border-gray-200">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
+                    <div>
+                      <h4 className="font-extrabold text-gray-900 text-sm flex items-center gap-2">
+                        <Building2 size={16} className="text-blue-600" />
+                        Realisasi Kinerja & Ambang Batas Cabang (Periode: {selectedPeriod === 'today' ? 'Hari Ini' : selectedPeriod === 'yesterday' ? 'Kemarin' : selectedPeriod === '7days' ? '7 Hari Terakhir' : 'Bulan Ini'})
+                      </h4>
+                      <p className="text-xs text-gray-700 font-medium mt-0.5">
+                        Rata-rata omzet dihitung dari total omset periode dibagi {kpiEvaluations.periodDays} hari aktif
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {kpiEvaluations.branchSummaries.map((b) => (
+                      <div 
+                        key={b.branchName} 
+                        className={`p-4 rounded-2xl border-2 transition-all relative flex flex-col justify-between ${
+                          b.isTargetMet 
+                            ? 'bg-emerald-50/30 border-emerald-300 hover:border-emerald-400' 
+                            : 'bg-rose-50/20 border-rose-200 hover:border-rose-300'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex justify-between items-start mb-2">
+                            <span className="font-extrabold text-gray-900 text-sm truncate">{b.branchName}</span>
+                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                              b.status === 'Online' ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-600'
+                            }`}>
+                              {b.status}
+                            </span>
+                          </div>
+
+                          <div className="space-y-2 my-3">
+                            <div>
+                              <div className="text-[11px] font-bold text-gray-700 flex justify-between">
+                                <span>Rata-rata Realisasi:</span>
+                                <span className={`font-black text-sm ${b.isTargetMet ? 'text-emerald-700' : 'text-rose-700'}`}>
+                                  Rp {b.dailyAvg.toLocaleString('id-ID')} / hari
+                                </span>
+                              </div>
+                              <div className="w-full bg-gray-200 h-2 rounded-full mt-1.5 overflow-hidden">
+                                <div 
+                                  className={`h-full rounded-full transition-all duration-500 ${b.isTargetMet ? 'bg-emerald-500' : 'bg-rose-500'}`}
+                                  style={{ width: `${Math.min(100, b.targetAchievementPct)}%` }}
+                                />
+                              </div>
+                            </div>
+
+                            <div className="text-[11px] text-gray-700 space-y-1 pt-1 font-semibold">
+                              <div className="flex justify-between">
+                                <span>Target Standar:</span>
+                                <span className="font-bold text-gray-900">Rp {b.dailyTarget.toLocaleString('id-ID')} / hari</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>Ambang Batas KPI:</span>
+                                <span className="font-bold text-gray-900">Rp {b.thresholdDaily.toLocaleString('id-ID')} / hari</span>
+                              </div>
+                              <div className="flex justify-between pt-1 border-t border-gray-200">
+                                <span>Total Omset ({b.periodDays} hr):</span>
+                                <span className="font-bold text-gray-900">Rp {b.totalOmzet.toLocaleString('id-ID')}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* BADGE EVALUASI HASIL */}
+                        <div className={`mt-3 p-2.5 rounded-xl border text-center ${
+                          b.isTargetMet 
+                            ? 'bg-emerald-100/70 border-emerald-300 text-emerald-900' 
+                            : 'bg-rose-100/70 border-rose-300 text-rose-900'
+                        }`}>
+                          <div className="text-[11px] font-black flex items-center justify-center gap-1">
+                            {b.isTargetMet ? (
+                              <>
+                                <CheckCircle size={13} className="text-emerald-700" />
+                                <span>Target Tercapai: Bonus +25%</span>
+                              </>
+                            ) : (
+                              <>
+                                <AlertCircle size={13} className="text-rose-700" />
+                                <span>Di Bawah Target: Potongan -25%</span>
+                              </>
+                            )}
+                          </div>
+                          <div className="text-[10px] font-bold opacity-90 mt-0.5">
+                            {b.isTargetMet 
+                              ? `+${b.operatorAdjustmentRate}% Operator • +${b.supervisorAdjustmentRate}% SPV` 
+                              : `-${b.operatorAdjustmentRate}% Operator • -${b.supervisorAdjustmentRate}% SPV`}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* TABEL RINCIAN EVALUASI & KOMISI KARYAWAN */}
+                <div className="p-5">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+                    <div>
+                      <h4 className="font-extrabold text-gray-900 text-sm flex items-center gap-2">
+                        <Users size={16} className="text-indigo-600" />
+                        Rincian Perhitungan Komisi Karyawan (Operator & Supervisor)
+                      </h4>
+                      <p className="text-xs text-gray-700 font-medium mt-0.5">
+                        Komisi bersih dihitung otomatis berdasarkan skema bonus/potongan 25% cabang masing-masing
+                      </p>
+                    </div>
+
+                    <div className="flex items-center space-x-2 self-stretch sm:self-auto">
+                      <select
+                        value={kpiBranchFilter}
+                        onChange={(e) => setKpiBranchFilter(e.target.value)}
+                        className="text-xs font-bold border border-gray-300 rounded-lg px-2.5 py-1.5 bg-white text-gray-900 outline-none"
+                      >
+                        <option value="Semua Cabang">Semua Cabang</option>
+                        {branchStats.map(b => (
+                          <option key={b.name} value={b.name}>{b.name}</option>
+                        ))}
+                      </select>
+
+                      <select
+                        value={kpiRoleFilter}
+                        onChange={(e) => setKpiRoleFilter(e.target.value as any)}
+                        className="text-xs font-bold border border-gray-300 rounded-lg px-2.5 py-1.5 bg-white text-gray-900 outline-none"
+                      >
+                        <option value="ALL">Semua Jabatan</option>
+                        <option value="Operator">Operator (Kasir)</option>
+                        <option value="Supervisor">Supervisor (SPV)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto border border-gray-200 rounded-xl">
+                    <table className="w-full text-left border-collapse whitespace-nowrap text-xs">
+                      <thead>
+                        <tr className="bg-gray-100 text-gray-800 uppercase tracking-wider font-extrabold border-b">
+                          <th className="p-3.5">Nama Karyawan</th>
+                          <th className="p-3.5">Jabatan</th>
+                          <th className="p-3.5">Cabang</th>
+                          <th className="p-3.5 text-right">Rata2 Omset Cabang</th>
+                          <th className="p-3.5 text-right">Komisi Dasar</th>
+                          <th className="p-3.5 text-center">Skema KPI</th>
+                          <th className="p-3.5 text-right">Penyesuaian</th>
+                          <th className="p-3.5 text-right">Komisi Bersih</th>
+                          <th className="p-3.5 text-center">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {(() => {
+                          const filtered = kpiEvaluations.employeeEvaluations.filter(emp => {
+                            if (kpiBranchFilter !== "Semua Cabang" && emp.branch.toLowerCase() !== kpiBranchFilter.toLowerCase()) return false;
+                            if (kpiRoleFilter !== "ALL" && emp.role !== kpiRoleFilter) return false;
+                            return true;
+                          });
+
+                          if (filtered.length === 0) {
+                            return (
+                              <tr>
+                                <td colSpan={9} className="p-6 text-center text-gray-500 font-bold">
+                                  Tidak ada data karyawan yang sesuai filter.
+                                </td>
+                              </tr>
+                            );
+                          }
+
+                          return filtered.map((emp) => (
+                            <tr key={emp.id} className="hover:bg-slate-50 transition-colors">
+                              <td className="p-3.5 font-bold text-gray-900 flex items-center space-x-2.5">
+                                <div className={`w-7 h-7 rounded-full flex items-center justify-center font-black text-xs ${
+                                  emp.role === 'Supervisor' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                                }`}>
+                                  {emp.name ? emp.name[0] : 'K'}
+                                </div>
+                                <span className="font-extrabold">{emp.name}</span>
+                              </td>
+                              <td className="p-3.5">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full font-bold text-[11px] ${
+                                  emp.role === 'Supervisor' 
+                                    ? 'bg-purple-100 text-purple-800 border border-purple-200' 
+                                    : 'bg-blue-100 text-blue-800 border border-blue-200'
+                                }`}>
+                                  {emp.role === 'Supervisor' ? 'Supervisor (SPV)' : 'Operator (Kasir)'}
+                                </span>
+                              </td>
+                              <td className="p-3.5 font-semibold text-gray-700">
+                                <div className="flex items-center">
+                                  <Building2 size={12} className="mr-1 text-gray-500" />
+                                  <span>{emp.branch}</span>
+                                </div>
+                              </td>
+                              <td className="p-3.5 text-right">
+                                <div className={`font-bold ${emp.isTargetMet ? 'text-emerald-700' : 'text-rose-700'}`}>
+                                  Rp {emp.branchDailyAvg.toLocaleString('id-ID')} / hr
+                                </div>
+                                <div className="text-[10px] text-gray-600">Ambang: Rp {emp.thresholdDaily.toLocaleString('id-ID')}</div>
+                              </td>
+                              <td className="p-3.5 text-right font-bold text-gray-800">
+                                <div>Rp {emp.baseCommission.toLocaleString('id-ID')}</div>
+                                <div className="text-[10px] text-gray-600 font-normal">Rate: {emp.baseRate}%</div>
+                              </td>
+                              <td className="p-3.5 text-center">
+                                <span className={`inline-flex items-center px-2.5 py-1 rounded-lg font-black text-[11px] ${
+                                  emp.isBonus 
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                                    : 'bg-rose-100 text-rose-800 border border-rose-200'
+                                }`}>
+                                  {emp.isBonus ? `+${emp.adjRate}% Bonus` : `-${emp.adjRate}% Potongan`}
+                                </span>
+                              </td>
+                              <td className="p-3.5 text-right font-black">
+                                <span className={emp.isBonus ? 'text-emerald-700' : 'text-rose-700'}>
+                                  {emp.isBonus ? '+' : '-'} Rp {emp.adjustmentAmount.toLocaleString('id-ID')}
+                                </span>
+                              </td>
+                              <td className="p-3.5 text-right font-black text-sm">
+                                <span className="bg-slate-100 text-slate-900 px-2.5 py-1 rounded-md border border-slate-200 inline-block font-mono">
+                                  Rp {emp.netCommission.toLocaleString('id-ID')}
+                                </span>
+                              </td>
+                              <td className="p-3.5 text-center">
+                                {emp.isTargetMet ? (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800">
+                                    <CheckCircle size={11} className="mr-1 text-emerald-600" /> Tercapai
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-800">
+                                    <AlertCircle size={11} className="mr-1 text-rose-600" /> Di Bawah Target
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          ));
+                        })()}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
               {/* LOG ABSENSI MASUK KARYAWAN */}
               <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                 <div className="p-5 border-b bg-gray-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
@@ -1881,72 +2560,111 @@ export default function OwnerDashboard() {
                 </div>
               </div>
 
-              {/* KASIR SETTINGS */}
+              {/* KASIR & SPV SETTINGS */}
               <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                <div className="p-5 border-b bg-gray-50/50 flex justify-between items-center">
-                  <h3 className="font-bold text-gray-800">Manajemen Akses Kasir</h3>
-                <button 
-                  onClick={() => {
-                    setNewOperator({ name: '', pin: '', branch: branchStats.length > 0 ? branchStats[0].name : '' });
-                    setShowOperatorModal(true);
-                  }}
-                  className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold shadow-md hover:bg-slate-800 transition-all"
-                >
-                  + Tambah Kasir
-                </button>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-gray-100 text-gray-800 text-xs uppercase tracking-wider font-extrabold">
-                      <th className="p-4 font-bold border-b">Nama Lengkap</th>
-                      <th className="p-4 font-bold border-b">PIN Akses</th>
-                      <th className="p-4 font-bold border-b">Cabang</th>
-                      <th className="p-4 font-bold border-b text-right">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {displayedOperators.map((op) => (
-                      <tr key={op.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="p-4 font-bold text-gray-900 flex items-center space-x-3">
-                          <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold">{op.name[0]}</div>
-                          <span>{op.name}</span>
-                        </td>
-                        <td className="p-4 font-mono text-gray-700 font-bold">{op.pin}</td>
-                        <td className="p-4 font-semibold text-gray-600">{op.branch}</td>
-                        <td className="p-4 text-right">
-                          <div className="flex justify-end items-center space-x-2">
-                            <button
-                              onClick={() => {
-                                setNewOperator({ ...op });
-                                setShowOperatorModal(true);
-                              }}
-                              className="text-blue-600 font-bold text-sm hover:text-blue-800"
-                            >
-                              Edit PIN
-                            </button>
-                            <span className="text-gray-300">|</span>
-                            <button 
-                              onClick={() => {
-                                if (confirm(`Hapus akses kasir ${op.name}?`)) {
-                                  const newOps = operators.filter(o => o.id !== op.id);
-                                  setOperators(newOps);
-                                  saveOperators(newOps);
-                                  alert(`Akses kasir ${op.name} berhasil dicabut!`);
-                                }
-                              }}
-                              className="text-red-600 font-bold text-sm hover:text-red-800"
-                            >
-                              Cabut Akses
-                            </button>
-                          </div>
-                        </td>
+                <div className="p-5 border-b bg-gray-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                  <div>
+                    <h3 className="font-bold text-gray-800">Manajemen Karyawan & Hak Akses (Operator & SPV)</h3>
+                    <p className="text-xs text-gray-700 font-medium mt-0.5">Daftar operator kasir dan supervisor cabang dengan PIN akses dan persentase komisi dasar</p>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      setNewOperator({ 
+                        name: '', 
+                        pin: '', 
+                        branch: branchStats.length > 0 ? branchStats[0].name : '', 
+                        role: 'Operator', 
+                        baseCommissionRate: 5 
+                      });
+                      setShowOperatorModal(true);
+                    }}
+                    className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold shadow-md hover:bg-slate-800 transition-all cursor-pointer whitespace-nowrap"
+                  >
+                    + Tambah Karyawan
+                  </button>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-gray-100 text-gray-800 text-xs uppercase tracking-wider font-extrabold">
+                        <th className="p-4 font-bold border-b">Nama Lengkap</th>
+                        <th className="p-4 font-bold border-b">Jabatan</th>
+                        <th className="p-4 font-bold border-b">PIN Akses</th>
+                        <th className="p-4 font-bold border-b">Cabang Penempatan</th>
+                        <th className="p-4 font-bold border-b text-center">Komisi Dasar</th>
+                        <th className="p-4 font-bold border-b text-right">Aksi</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {displayedOperators.map((op) => {
+                        const isSpv = op.role === 'Supervisor' || (op.name && (op.name.toLowerCase().includes('spv') || op.name.toLowerCase().includes('supervisor')));
+                        const role = op.role || (isSpv ? 'Supervisor' : 'Operator');
+                        const baseRate = op.baseCommissionRate !== undefined ? op.baseCommissionRate : (isSpv ? 3 : 5);
+
+                        return (
+                          <tr key={op.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="p-4 font-bold text-gray-900 flex items-center space-x-3">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${
+                                role === 'Supervisor' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                              }`}>
+                                {op.name[0]}
+                              </div>
+                              <span>{op.name}</span>
+                            </td>
+                            <td className="p-4">
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                                role === 'Supervisor' 
+                                  ? 'bg-purple-100 text-purple-800 border border-purple-200' 
+                                  : 'bg-blue-100 text-blue-800 border border-blue-200'
+                              }`}>
+                                {role === 'Supervisor' ? 'Supervisor (SPV)' : 'Operator (Kasir)'}
+                              </span>
+                            </td>
+                            <td className="p-4 font-mono text-gray-700 font-bold">{op.pin}</td>
+                            <td className="p-4 font-semibold text-gray-600">{op.branch}</td>
+                            <td className="p-4 text-center font-mono font-bold text-gray-800">
+                              <span className="bg-gray-100 px-2 py-0.5 rounded text-xs">
+                                {baseRate}%
+                              </span>
+                            </td>
+                            <td className="p-4 text-right">
+                              <div className="flex justify-end items-center space-x-2">
+                                <button
+                                  onClick={() => {
+                                    setNewOperator({ 
+                                      ...op, 
+                                      role, 
+                                      baseCommissionRate: baseRate 
+                                    });
+                                    setShowOperatorModal(true);
+                                  }}
+                                  className="text-blue-600 font-bold text-sm hover:text-blue-800 cursor-pointer"
+                                >
+                                  Edit
+                                </button>
+                                <span className="text-gray-300">|</span>
+                                <button 
+                                  onClick={() => {
+                                    if (confirm(`Hapus data karyawan ${op.name}?`)) {
+                                      const newOps = operators.filter(o => o.id !== op.id);
+                                      setOperators(newOps);
+                                      saveOperators(newOps);
+                                      alert(`Akses karyawan ${op.name} berhasil dicabut!`);
+                                    }
+                                  }}
+                                  className="text-red-600 font-bold text-sm hover:text-red-800 cursor-pointer"
+                                >
+                                  Cabut Akses
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
 
             {/* SHIFT AUDIT */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mt-6">
@@ -2780,7 +3498,7 @@ export default function OwnerDashboard() {
                         <div className="py-2 border-b border-dashed border-gray-300 space-y-0.5 text-[10px] text-gray-600">
                           <div className="flex justify-between">
                             <span>No: TRX-DEMO01</span>
-                            <span>{new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span>
+                            <span>{todayLabel || '08:00'}</span>
                           </div>
                           <div className="flex justify-between">
                             <span>Kasir: Kasir Shift</span>
@@ -3276,15 +3994,18 @@ export default function OwnerDashboard() {
       )}
 
 
-      {/* Add / Edit Operator Modal */}
+      {/* Add / Edit Operator / SPV Modal */}
       {showOperatorModal && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col border border-gray-200 text-gray-900 overflow-hidden my-auto">
             <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between shrink-0 bg-white">
-              <h3 className="font-extrabold text-xl text-gray-900">{newOperator.id ? 'Edit Akses Kasir' : 'Tambah Kasir Baru'}</h3>
+              <div>
+                <h3 className="font-extrabold text-xl text-gray-900">{newOperator.id ? 'Edit Data Karyawan' : 'Tambah Karyawan Baru'}</h3>
+                <p className="text-xs text-gray-700 font-medium mt-0.5">Atur hak akses kasir / supervisor dan komisi dasar</p>
+              </div>
               <button 
                 type="button"
-                onClick={() => { setShowOperatorModal(false); setNewOperator({ name: '', pin: '', branch: '' }); }}
+                onClick={() => { setShowOperatorModal(false); setNewOperator({ name: '', pin: '', branch: '', role: 'Operator', baseCommissionRate: 5 }); }}
                 className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
                 title="Tutup"
               >
@@ -3295,15 +4016,69 @@ export default function OwnerDashboard() {
             <div className="p-4 sm:p-5 overflow-y-auto space-y-4 flex-1">
               <div>
                 <label className="block text-sm font-bold text-gray-800 mb-1">Nama Lengkap</label>
-                <input type="text" className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900 bg-white" value={newOperator.name} onChange={e => setNewOperator({...newOperator, name: e.target.value})} placeholder="Misal: Budi Santoso" />
+                <input 
+                  type="text" 
+                  className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900 bg-white" 
+                  value={newOperator.name} 
+                  onChange={e => setNewOperator({...newOperator, name: e.target.value})} 
+                  placeholder="Misal: Budi Santoso" 
+                />
               </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-bold text-gray-800 mb-1">Jabatan / Peran</label>
+                  <select 
+                    className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900 bg-white text-sm" 
+                    value={newOperator.role || 'Operator'} 
+                    onChange={e => {
+                      const newRole = e.target.value;
+                      const defaultRate = newRole === 'Supervisor' ? 3 : 5;
+                      setNewOperator({
+                        ...newOperator, 
+                        role: newRole,
+                        baseCommissionRate: newOperator.baseCommissionRate !== undefined ? newOperator.baseCommissionRate : defaultRate
+                      });
+                    }}
+                  >
+                    <option value="Operator">Operator (Kasir)</option>
+                    <option value="Supervisor">Supervisor (SPV)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-800 mb-1">Komisi Dasar (%)</label>
+                  <input 
+                    type="number" 
+                    step="0.1"
+                    min="0"
+                    max="100"
+                    className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900 bg-white text-sm" 
+                    value={newOperator.baseCommissionRate !== undefined ? newOperator.baseCommissionRate : (newOperator.role === 'Supervisor' ? 3 : 5)} 
+                    onChange={e => setNewOperator({...newOperator, baseCommissionRate: Number(e.target.value)})} 
+                    placeholder="Misal: 5" 
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="block text-sm font-bold text-gray-800 mb-1">PIN Akses (4-6 digit)</label>
-                <input type="text" className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-mono font-bold text-gray-900 bg-white" value={newOperator.pin} onChange={e => setNewOperator({...newOperator, pin: e.target.value.replace(/\D/g, '')})} placeholder="1234" maxLength={6} />
+                <input 
+                  type="text" 
+                  className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-mono font-bold text-gray-900 bg-white" 
+                  value={newOperator.pin} 
+                  onChange={e => setNewOperator({...newOperator, pin: e.target.value.replace(/\D/g, '')})} 
+                  placeholder="1234" 
+                  maxLength={6} 
+                />
               </div>
+
               <div>
                 <label className="block text-sm font-bold text-gray-800 mb-1">Cabang Penempatan</label>
-                <select className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900 bg-white" value={newOperator.branch} onChange={e => setNewOperator({...newOperator, branch: e.target.value})}>
+                <select 
+                  className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900 bg-white text-sm" 
+                  value={newOperator.branch} 
+                  onChange={e => setNewOperator({...newOperator, branch: e.target.value})}
+                >
                   {branchStats.map(b => <option key={b.name} value={b.name}>{b.name}</option>)}
                 </select>
               </div>
@@ -3311,8 +4086,8 @@ export default function OwnerDashboard() {
 
             <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-end space-x-3 shrink-0 rounded-b-2xl">
               <button 
-                type="button"
-                onClick={() => { setShowOperatorModal(false); setNewOperator({ name: '', pin: '', branch: '' }); }} 
+                type="button" 
+                onClick={() => { setShowOperatorModal(false); setNewOperator({ name: '', pin: '', branch: '', role: 'Operator', baseCommissionRate: 5 }); }} 
                 className="px-4 py-2 font-bold text-gray-700 hover:bg-gray-200 bg-gray-100 rounded-lg text-sm cursor-pointer"
               >
                 Batal
@@ -3321,26 +4096,237 @@ export default function OwnerDashboard() {
                 type="button"
                 onClick={() => {
                   if (!newOperator.name || !newOperator.pin || !newOperator.branch) {
-                    alert("Harap lengkapi semua data!");
+                    alert("Harap lengkapi nama, PIN, dan cabang karyawan!");
                     return;
                   }
+                  const role = newOperator.role || 'Operator';
+                  const baseRate = newOperator.baseCommissionRate !== undefined ? newOperator.baseCommissionRate : (role === 'Supervisor' ? 3 : 5);
+                  const payload = {
+                    ...newOperator,
+                    role,
+                    baseCommissionRate: baseRate
+                  };
+
                   let newOps;
                   if (newOperator.id) {
-                    newOps = operators.map(o => o.id === newOperator.id ? { ...newOperator } : o);
-                    alert(`Akses kasir ${newOperator.name} berhasil diperbarui!`);
+                    newOps = operators.map(o => o.id === newOperator.id ? { ...payload } : o);
+                    alert(`Data karyawan ${newOperator.name} berhasil diperbarui!`);
                   } else {
-                    newOps = [...operators, { ...newOperator, id: Date.now() }];
-                    alert(`Kasir ${newOperator.name} berhasil ditambahkan!`);
+                    newOps = [...operators, { ...payload, id: Date.now() }];
+                    alert(`Karyawan ${newOperator.name} berhasil ditambahkan!`);
                   }
                   setOperators(newOps);
                   saveOperators(newOps);
                   setShowOperatorModal(false);
-                  setNewOperator({ name: '', pin: '', branch: '' });
+                  setNewOperator({ name: '', pin: '', branch: '', role: 'Operator', baseCommissionRate: 5 });
                 }} 
                 className="px-4 py-2 font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow text-sm cursor-pointer"
               >
                 Simpan Karyawan
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PENGATURAN TARGET & SKEMA KPI OTOMATIS */}
+      {showKpiSettingsModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col border border-gray-200 text-gray-900 overflow-hidden my-auto">
+            <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between shrink-0 bg-gradient-to-r from-slate-900 to-blue-950 text-white">
+              <div className="flex items-center space-x-2.5">
+                <div className="p-1.5 bg-yellow-400 text-slate-950 rounded-lg">
+                  <Target size={18} />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-lg text-white">Konfigurasi Target Cabang & Skema KPI</h3>
+                  <p className="text-xs text-blue-200 font-medium">Atur target omzet harian/bulanan dan rumus komisi (+/- 25%)</p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setShowKpiSettingsModal(false)}
+                className="p-1.5 text-blue-200 hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
+                title="Tutup"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-5 overflow-y-auto space-y-5 flex-1">
+              {/* TARGET UTAMA CABANG */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-black uppercase text-gray-700 tracking-wider flex items-center gap-1.5">
+                  <Building2 size={14} className="text-blue-600" />
+                  1. Target Omzet Cabang & Ambang Batas Evaluasi
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 bg-slate-50 p-3.5 rounded-xl border border-gray-200">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Target Bulanan Cabang (Rp)</label>
+                    <input 
+                      type="number"
+                      step="500000"
+                      min="1000000"
+                      className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900 bg-white text-sm"
+                      value={editingKpiSettings.monthlyTarget}
+                      onChange={e => {
+                        const mTarget = Number(e.target.value);
+                        setEditingKpiSettings({
+                          ...editingKpiSettings,
+                          monthlyTarget: mTarget,
+                          dailyTarget: Math.round(mTarget / 30)
+                        });
+                      }}
+                      placeholder="15000000"
+                    />
+                    <p className="text-[11px] text-gray-600 font-medium mt-1">Standar: Rp 15.000.000 / bulan</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Target Harian Cabang (Rp)</label>
+                    <input 
+                      type="number"
+                      step="50000"
+                      min="10000"
+                      className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900 bg-white text-sm"
+                      value={editingKpiSettings.dailyTarget}
+                      onChange={e => setEditingKpiSettings({ ...editingKpiSettings, dailyTarget: Number(e.target.value) })}
+                      placeholder="500000"
+                    />
+                    <p className="text-[11px] text-gray-600 font-medium mt-1">Standar: Rp 500.000 / hari</p>
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Ambang Batas Evaluasi Harian (Benchmark Rp)</label>
+                    <input 
+                      type="number"
+                      step="50000"
+                      min="10000"
+                      className="w-full border-2 border-amber-300 bg-amber-50/30 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-amber-500 font-black text-gray-900 text-sm"
+                      value={editingKpiSettings.thresholdDaily}
+                      onChange={e => setEditingKpiSettings({ ...editingKpiSettings, thresholdDaily: Number(e.target.value) })}
+                      placeholder="250000"
+                    />
+                    <p className="text-[11px] text-amber-800 font-semibold mt-1">
+                      Ambang batas pembeda: jika rata-rata omset &ge; Rp {editingKpiSettings.thresholdDaily.toLocaleString('id-ID')} mendapat bonus 25%, jika di bawah mendapat potongan 25%.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* RUMUS POTONGAN & TAMBAHAN KOMISI */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-black uppercase text-gray-700 tracking-wider flex items-center gap-1.5">
+                  <Percent size={14} className="text-emerald-600" />
+                  2. Persentase Penyesuaian Kinerja (Total: {editingKpiSettings.operatorAdjustmentRate + editingKpiSettings.supervisorAdjustmentRate}%)
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 bg-slate-50 p-3.5 rounded-xl border border-gray-200">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Penyesuaian Operator / Kasir (%)</label>
+                    <input 
+                      type="number"
+                      step="1"
+                      min="0"
+                      max="100"
+                      className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900 bg-white text-sm"
+                      value={editingKpiSettings.operatorAdjustmentRate}
+                      onChange={e => setEditingKpiSettings({ ...editingKpiSettings, operatorAdjustmentRate: Number(e.target.value) })}
+                      placeholder="15"
+                    />
+                    <p className="text-[11px] text-gray-600 font-medium mt-1">Standar aturan: 15% untuk operator</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Penyesuaian Supervisor / SPV (%)</label>
+                    <input 
+                      type="number"
+                      step="1"
+                      min="0"
+                      max="100"
+                      className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900 bg-white text-sm"
+                      value={editingKpiSettings.supervisorAdjustmentRate}
+                      onChange={e => setEditingKpiSettings({ ...editingKpiSettings, supervisorAdjustmentRate: Number(e.target.value) })}
+                      placeholder="10"
+                    />
+                    <p className="text-[11px] text-gray-600 font-medium mt-1">Standar aturan: 10% untuk SPV</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* KOMISI DASAR STANDAR */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-black uppercase text-gray-700 tracking-wider flex items-center gap-1.5">
+                  <DollarSign size={14} className="text-indigo-600" />
+                  3. Komisi Dasar Standar (% dari Omzet Cabang)
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 bg-slate-50 p-3.5 rounded-xl border border-gray-200">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Komisi Dasar Operator (%)</label>
+                    <input 
+                      type="number"
+                      step="0.5"
+                      min="0"
+                      max="50"
+                      className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900 bg-white text-sm"
+                      value={editingKpiSettings.operatorBaseRate}
+                      onChange={e => setEditingKpiSettings({ ...editingKpiSettings, operatorBaseRate: Number(e.target.value) })}
+                      placeholder="5"
+                    />
+                    <p className="text-[11px] text-gray-600 font-medium mt-1">Komisi pokok sebelum bonus/potongan (Default: 5%)</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Komisi Dasar Supervisor (%)</label>
+                    <input 
+                      type="number"
+                      step="0.5"
+                      min="0"
+                      max="50"
+                      className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900 bg-white text-sm"
+                      value={editingKpiSettings.supervisorBaseRate}
+                      onChange={e => setEditingKpiSettings({ ...editingKpiSettings, supervisorBaseRate: Number(e.target.value) })}
+                      placeholder="3"
+                    />
+                    <p className="text-[11px] text-gray-600 font-medium mt-1">Komisi pokok sebelum bonus/potongan (Default: 3%)</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between shrink-0 rounded-b-2xl">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingKpiSettings({ ...DEFAULT_KPI_SETTINGS });
+                }}
+                className="px-3 py-2 text-xs font-bold text-gray-600 hover:text-gray-900 hover:bg-gray-200 rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                title="Kembalikan ke nilai default awal (15jt, 500rb, 250rb, 15% & 10%)"
+              >
+                <RotateCcw size={13} />
+                <span>Reset ke Standar</span>
+              </button>
+
+              <div className="flex space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setShowKpiSettingsModal(false)}
+                  className="px-4 py-2 font-bold text-gray-700 hover:bg-gray-200 bg-gray-100 rounded-lg text-sm cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setKpiSettings({ ...editingKpiSettings });
+                    saveKpiSettings(editingKpiSettings);
+                    setShowKpiSettingsModal(false);
+                    alert("✅ Konfigurasi target cabang dan skema KPI berhasil disimpan!");
+                  }}
+                  className="px-5 py-2 font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow text-sm cursor-pointer"
+                >
+                  Simpan Konfigurasi
+                </button>
+              </div>
             </div>
           </div>
         </div>

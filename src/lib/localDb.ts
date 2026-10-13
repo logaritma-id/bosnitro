@@ -1,6 +1,9 @@
 export const DEFAULT_OPERATORS = [
-  { id: 1, name: "Budi Santoso", pin: "1234", branch: "Tambun 1" },
-  { id: 2, name: "Siti Aminah", pin: "5678", branch: "Tambun 1" }
+  { id: 1, name: "Budi Santoso", pin: "1234", branch: "Tambun 1", role: "Operator", baseCommissionRate: 5 },
+  { id: 2, name: "Siti Aminah", pin: "5678", branch: "Tambun 1", role: "Operator", baseCommissionRate: 5 },
+  { id: 3, name: "Hendro Wibowo (SPV)", pin: "9988", branch: "Tambun 1", role: "Supervisor", baseCommissionRate: 3 },
+  { id: 4, name: "Rian Pratama", pin: "2468", branch: "Tambun 2", role: "Operator", baseCommissionRate: 5 },
+  { id: 5, name: "Agus Santoso (SPV)", pin: "1357", branch: "Tambun 2", role: "Supervisor", baseCommissionRate: 3 }
 ];
 
 export const DEFAULT_PRODUCTS = [
@@ -22,7 +25,20 @@ export const DEFAULT_PRODUCTS = [
 export function getOperators() {
   if (typeof window === "undefined") return DEFAULT_OPERATORS;
   const data = localStorage.getItem("pos_operators");
-  return data ? JSON.parse(data) : DEFAULT_OPERATORS;
+  if (!data) return DEFAULT_OPERATORS;
+  try {
+    const list = JSON.parse(data);
+    return list.map((op: any) => {
+      const isSpv = op.role === 'Supervisor' || (op.name && (op.name.toLowerCase().includes('spv') || op.name.toLowerCase().includes('supervisor')));
+      return {
+        ...op,
+        role: op.role || (isSpv ? 'Supervisor' : 'Operator'),
+        baseCommissionRate: op.baseCommissionRate !== undefined ? Number(op.baseCommissionRate) : (isSpv ? 3 : 5)
+      };
+    });
+  } catch {
+    return DEFAULT_OPERATORS;
+  }
 }
 
 export function saveOperators(operators: any[]) {
@@ -104,3 +120,65 @@ export function saveCustomers(customers: any[]) {
   channel.postMessage({ type: 'DB_UPDATE', payload: { entity: 'customers' } });
   channel.close();
 }
+
+export interface BranchTargetConfig {
+  monthlyTarget: number;
+  dailyTarget: number;
+  thresholdDaily: number;
+}
+
+export interface KPISettings {
+  monthlyTarget: number;           // Target Omset Bulanan per cabang, default 15.000.000 (15 Juta)
+  dailyTarget: number;             // Target Omset Harian, default 500.000 (500 Ribu/hari)
+  thresholdDaily: number;          // Ambang Batas Evaluasi Harian, default 250.000 (250 Ribu/hari)
+  operatorAdjustmentRate: number;  // Potongan / Tambahan Komisi Operator, default 15 (%)
+  supervisorAdjustmentRate: number;// Potongan / Tambahan Komisi Supervisor, default 10 (%)
+  operatorBaseRate: number;        // Komisi Dasar Standar Operator, default 5 (%)
+  supervisorBaseRate: number;      // Komisi Dasar Standar Supervisor, default 3 (%)
+  branchTargets?: { [branchName: string]: BranchTargetConfig };
+}
+
+export const DEFAULT_KPI_SETTINGS: KPISettings = {
+  monthlyTarget: 15000000,
+  dailyTarget: 500000,
+  thresholdDaily: 250000,
+  operatorAdjustmentRate: 15,
+  supervisorAdjustmentRate: 10,
+  operatorBaseRate: 5,
+  supervisorBaseRate: 3,
+  branchTargets: {
+    "Tambun 1": { monthlyTarget: 15000000, dailyTarget: 500000, thresholdDaily: 250000 },
+    "Tambun 2": { monthlyTarget: 15000000, dailyTarget: 500000, thresholdDaily: 250000 },
+    "Cibitung 1": { monthlyTarget: 15000000, dailyTarget: 500000, thresholdDaily: 250000 },
+    "Cibitung 2": { monthlyTarget: 15000000, dailyTarget: 500000, thresholdDaily: 250000 },
+  }
+};
+
+export function getKpiSettings(): KPISettings {
+  if (typeof window === "undefined") return DEFAULT_KPI_SETTINGS;
+  const data = localStorage.getItem("pos_kpi_settings");
+  if (!data) return DEFAULT_KPI_SETTINGS;
+  try {
+    const parsed = JSON.parse(data);
+    return {
+      ...DEFAULT_KPI_SETTINGS,
+      ...parsed,
+      branchTargets: {
+        ...DEFAULT_KPI_SETTINGS.branchTargets,
+        ...(parsed.branchTargets || {})
+      }
+    };
+  } catch {
+    return DEFAULT_KPI_SETTINGS;
+  }
+}
+
+export function saveKpiSettings(settings: KPISettings) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem("pos_kpi_settings", JSON.stringify(settings));
+  // Broadcast update
+  const channel = new BroadcastChannel('pos_demo_channel');
+  channel.postMessage({ type: 'DB_UPDATE', payload: { entity: 'kpiSettings', data: settings } });
+  channel.close();
+}
+
