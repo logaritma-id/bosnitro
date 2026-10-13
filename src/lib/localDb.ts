@@ -4,10 +4,10 @@ export const DEFAULT_OPERATORS = [
 ];
 
 export const DEFAULT_PRODUCTS = [
-  { id: 1, name: "Isi Baru Motor", harga: 5000, hpp: 500, stok: 999, img: "https://placehold.co/100x100/1e293b/ffffff?text=Isi+Baru" },
-  { id: 2, name: "Tambal Ban Motor", harga: 15000, hpp: 1000, stok: 4, img: "https://placehold.co/100x100/1e293b/ffffff?text=Tambal" },
-  { id: 3, name: "Ganti Oli Mesin", harga: 50000, hpp: 35000, stok: 12, img: "https://placehold.co/100x100/1e293b/ffffff?text=Oli" },
-  { id: 4, name: "Cairan Tubles", harga: 35000, hpp: 20000, stok: 2, img: "https://placehold.co/100x100/1e293b/ffffff?text=Tubles" },
+  { id: 1, name: "Isi Baru Motor", harga: 5000, hpp: 500, stok: 999, img: "https://placehold.co/100x100/1e293b/ffffff?text=Isi+Baru", category: "nitrogen" },
+  { id: 2, name: "Tambal Ban Motor", harga: 15000, hpp: 1000, stok: 4, img: "https://placehold.co/100x100/1e293b/ffffff?text=Tambal", category: "nitrogen" },
+  { id: 3, name: "Ganti Oli Mesin", harga: 50000, hpp: 35000, stok: 12, img: "https://placehold.co/100x100/1e293b/ffffff?text=Oli", category: "ritel" },
+  { id: 4, name: "Cairan Tubles", harga: 35000, hpp: 20000, stok: 2, img: "https://placehold.co/100x100/1e293b/ffffff?text=Tubles", category: "ritel" },
 ];
 
 export function getOperators() {

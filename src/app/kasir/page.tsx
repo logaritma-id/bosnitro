@@ -804,7 +804,7 @@ export default function KasirPage() {
                     </div>
                     
                     <div className="flex-1 overflow-y-auto space-y-3 pr-1 pb-4">
-                      {products.filter(p => p.name.toLowerCase().includes(vehicleType) && (p.name.toLowerCase().includes("isi") || p.name.toLowerCase().includes("tambal") || p.name.toLowerCase().includes("nitrogen"))).map((product) => (
+                      {products.filter(p => p.category === 'nitrogen').map((product) => (
                         <button
                           key={product.id}
                           onClick={() => addToCart(product)}
@@ -822,7 +822,7 @@ export default function KasirPage() {
                           <span className="text-blue-600 font-black text-xl">Rp {product.harga.toLocaleString('id-ID')}</span>
                         </button>
                       ))}
-                      {products.filter(p => p.name.toLowerCase().includes(vehicleType) && (p.name.toLowerCase().includes("isi") || p.name.toLowerCase().includes("tambal") || p.name.toLowerCase().includes("nitrogen"))).length === 0 && (
+                      {products.filter(p => p.category === 'nitrogen').length === 0 && (
                         <div className="text-center p-8 text-gray-400 font-bold border-2 border-dashed border-gray-200 rounded-2xl">
                           Belum ada layanan untuk {vehicleType}.
                         </div>
@@ -853,7 +853,7 @@ export default function KasirPage() {
                 )}
 
                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 mt-4">
-                  {products.filter(p => !(p.name.toLowerCase().includes("isi") || p.name.toLowerCase().includes("tambal") || p.name.toLowerCase().includes("nitrogen"))).map((product) => (
+                  {products.filter(p => p.category === 'ritel').map((product) => (
                     <button
                       key={product.id}
                       onClick={() => addToCart(product)}

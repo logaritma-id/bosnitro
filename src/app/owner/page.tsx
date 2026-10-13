@@ -156,7 +156,7 @@ export default function OwnerDashboard() {
   const [products, setProducts] = useState<any[]>([]);
   const [operators, setOperators] = useState<any[]>([]);
   const [showProductModal, setShowProductModal] = useState(false);
-  const [newProduct, setNewProduct] = useState<{id?: number, name: string, harga: number, hpp: number, stok: number, img: string}>({ name: '', harga: 0, hpp: 0, stok: 0, img: '' });
+  const [newProduct, setNewProduct] = useState<{id?: number, name: string, harga: number, hpp: number, stok: number, img: string, category: string}>({ name: '', harga: 0, hpp: 0, stok: 0, img: '', category: 'nitrogen' });
   const [showOperatorModal, setShowOperatorModal] = useState(false);
   const [newOperator, setNewOperator] = useState<{id?: number, name: string, pin: string, branch: string}>({ name: '', pin: '', branch: '' });
   const [selectedBranchConfig, setSelectedBranchConfig] = useState<any>(null);
@@ -980,6 +980,7 @@ export default function OwnerDashboard() {
                   <thead>
                     <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
                       <th className="p-4 font-bold border-b">Nama Layanan / Barang</th>
+                      <th className="p-4 font-bold border-b">Kategori</th>
                       <th className="p-4 font-bold border-b text-right">Harga Jual</th>
                       <th className="p-4 font-bold border-b text-right">HPP (Modal)</th>
                       <th className="p-4 font-bold border-b text-right">Margin</th>
@@ -994,6 +995,13 @@ export default function OwnerDashboard() {
                         <td className="p-4 font-bold text-gray-900 flex items-center space-x-3">
                           <img src={prod.img} alt={prod.name} className="w-10 h-10 rounded-md object-cover border" />
                           <span>{prod.name}</span>
+                        </td>
+                        <td className="p-4">
+                          {prod.category === 'nitrogen' ? (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-700">⚗️ Nitrogen</span>
+                          ) : (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-700">🛒 Ritel</span>
+                          )}
                         </td>
                         <td className="p-4 text-right font-semibold text-gray-700">Rp {prod.harga.toLocaleString('id-ID')}</td>
                         <td className="p-4 text-right font-semibold text-gray-500">Rp {prod.hpp.toLocaleString('id-ID')}</td>
@@ -1032,6 +1040,7 @@ export default function OwnerDashboard() {
               </div>
             </div>
           )}
+
 
           {/* TAB 4: KARYAWAN & SHIFT */}
           {activeTab === "karyawan" && (
@@ -1442,6 +1451,25 @@ export default function OwnerDashboard() {
                 <label className="block text-sm font-bold text-gray-700 mb-1">Nama Produk</label>
                 <input type="text" className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} />
               </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">Kategori Produk</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setNewProduct({...newProduct, category: 'nitrogen'})}
+                    className={`p-3 rounded-xl border-2 font-bold text-sm transition-all flex items-center justify-center space-x-2 ${newProduct.category === 'nitrogen' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                  >
+                    <span>⚗️</span><span>Layanan Nitrogen</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewProduct({...newProduct, category: 'ritel'})}
+                    className={`p-3 rounded-xl border-2 font-bold text-sm transition-all flex items-center justify-center space-x-2 ${newProduct.category === 'ritel' ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                  >
+                    <span>🛒</span><span>Ritel & Aksesoris</span>
+                  </button>
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-1">Harga Jual</label>
@@ -1487,7 +1515,7 @@ export default function OwnerDashboard() {
                     setProducts(updated);
                     saveProducts(updated);
                     setShowProductModal(false);
-                    setNewProduct({ name: '', harga: 0, hpp: 0, stok: 0, img: '' });
+                    setNewProduct({ name: '', harga: 0, hpp: 0, stok: 0, img: '', category: 'nitrogen' });
                     alert('Produk berhasil dihapus!');
                   } catch (err: any) {
                     alert('Gagal menghapus: ' + (err?.message || 'Error'));
@@ -1495,7 +1523,7 @@ export default function OwnerDashboard() {
                 }} className="px-4 py-2 font-bold text-red-600 hover:bg-red-50 border border-red-200 rounded-lg text-sm">🗑 Hapus</button>
               )}
               <div className="flex space-x-3 ml-auto">
-                <button onClick={() => { setShowProductModal(false); setNewProduct({ name: '', harga: 0, hpp: 0, stok: 0, img: '' }); }} className="px-4 py-2 font-bold text-gray-600 hover:bg-gray-100 rounded-lg">Batal</button>
+                <button onClick={() => { setShowProductModal(false); setNewProduct({ name: '', harga: 0, hpp: 0, stok: 0, img: '', category: 'nitrogen' }); }} className="px-4 py-2 font-bold text-gray-600 hover:bg-gray-100 rounded-lg">Batal</button>
                 <button onClick={async () => {
                   if (!newProduct.name.trim()) { alert('Nama produk tidak boleh kosong!'); return; }
                   try {
@@ -1508,6 +1536,7 @@ export default function OwnerDashboard() {
                         hpp: newProduct.hpp,
                         stok: newProduct.stok,
                         img: newProduct.img,
+                        category: newProduct.category,
                         updated_at: new Date().toISOString()
                       }).eq('id', newProduct.id);
                       if (error) throw error;
@@ -1520,7 +1549,8 @@ export default function OwnerDashboard() {
                         harga: newProduct.harga,
                         hpp: newProduct.hpp,
                         stok: newProduct.stok,
-                        img: newProduct.img
+                        img: newProduct.img,
+                        category: newProduct.category
                       }).select().single();
                       if (error) throw error;
                       updated = [...products, inserted];
@@ -1533,7 +1563,7 @@ export default function OwnerDashboard() {
                     bc.postMessage({ type: 'DB_UPDATE', payload: { entity: 'products' } });
                     bc.close();
                     setShowProductModal(false);
-                    setNewProduct({ name: '', harga: 0, hpp: 0, stok: 0, img: '' });
+                    setNewProduct({ name: '', harga: 0, hpp: 0, stok: 0, img: '', category: 'nitrogen' });
                   } catch (err: any) {
                     alert('Gagal menyimpan produk: ' + (err?.message || 'Error koneksi Supabase'));
                   }

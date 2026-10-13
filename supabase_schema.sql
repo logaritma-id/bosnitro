@@ -32,17 +32,18 @@ CREATE TABLE IF NOT EXISTS public.products (
     hpp INTEGER NOT NULL DEFAULT 0,
     stok INTEGER NOT NULL DEFAULT 0,
     img TEXT DEFAULT '',
+    category TEXT NOT NULL DEFAULT 'nitrogen',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Inisialisasi data produk default
-INSERT INTO public.products (name, harga, hpp, stok, img)
+INSERT INTO public.products (name, harga, hpp, stok, img, category)
 VALUES
-  ('Isi Baru Motor', 5000, 500, 999, 'https://placehold.co/100x100/1e293b/ffffff?text=Isi+Baru'),
-  ('Tambal Ban Motor', 15000, 1000, 4, 'https://placehold.co/100x100/1e293b/ffffff?text=Tambal'),
-  ('Ganti Oli Mesin', 50000, 35000, 12, 'https://placehold.co/100x100/1e293b/ffffff?text=Oli'),
-  ('Cairan Tubles', 35000, 20000, 2, 'https://placehold.co/100x100/1e293b/ffffff?text=Tubles')
+  ('Isi Baru Motor', 5000, 500, 999, 'https://placehold.co/100x100/1e293b/ffffff?text=Isi+Baru', 'nitrogen'),
+  ('Tambal Ban Motor', 15000, 1000, 4, 'https://placehold.co/100x100/1e293b/ffffff?text=Tambal', 'nitrogen'),
+  ('Ganti Oli Mesin', 50000, 35000, 12, 'https://placehold.co/100x100/1e293b/ffffff?text=Oli', 'ritel'),
+  ('Cairan Tubles', 35000, 20000, 2, 'https://placehold.co/100x100/1e293b/ffffff?text=Tubles', 'ritel')
 ON CONFLICT DO NOTHING;
 
 ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
