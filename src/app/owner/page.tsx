@@ -256,7 +256,8 @@ export default function OwnerDashboard() {
         const timeStr = new Date(t.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
         const branchNameStr = (t.branch_id === 'd0e659b9-0c62-4015-ab1b-265de35bfcd1' || !t.branch_id) ? 'Tambun 1' : t.branch_id;
         return {
-          id: `TRX-${t.id.slice(0, 6)}`,
+          id: `TRX-${String(t.id).slice(0, 6)}`,
+          rawId: t.id,
           time: timeStr,
           createdAt: t.created_at,
           branch: branchNameStr,
@@ -586,6 +587,73 @@ export default function OwnerDashboard() {
     document.body.removeChild(link);
   };
 
+  // Handler untuk menghapus gambar rekaman CCTV transaksi
+  const handleDeleteCctvSnapshot = async (snap: any) => {
+    if (!confirm(`Hapus foto bukti rekaman CCTV untuk ${snap.id} (${snap.branch})?\nGambar akan dihapus permanen dari audit log.`)) return;
+    try {
+      const targetId = snap.rawId || snap.id;
+      if (targetId && !String(targetId).startsWith('trx-demo')) {
+        const { error } = await supabase
+          .from('transactions')
+          .update({ snapshot_url: null })
+          .eq('id', targetId);
+        if (error) console.warn("Supabase update warning:", error);
+      }
+      setRawTransactions(prev => prev.map(t => (t.id === targetId || t.id === snap.rawId) ? { ...t, snapshot_url: null } : t));
+      setSnapshots(prev => prev.filter(s => (s.rawId || s.id) !== targetId));
+      alert("✅ Gambar rekaman CCTV berhasil dihapus!");
+    } catch (err: any) {
+      alert("Gagal menghapus gambar CCTV: " + (err?.message || "Error"));
+    }
+  };
+
+  // Handler untuk membersihkan semua gambar CCTV periode/cabang saat ini
+  const handleClearAllCctvSnapshots = async () => {
+    if (filteredAuditSnapshots.length === 0) {
+      alert("Tidak ada rekaman CCTV untuk dihapus.");
+      return;
+    }
+    const msg = selectedBranch === "Semua Cabang"
+      ? `Hapus SEMUA (${filteredAuditSnapshots.length}) gambar rekaman CCTV pada periode ini?`
+      : `Hapus semua (${filteredAuditSnapshots.length}) gambar rekaman CCTV untuk cabang ${selectedBranch}?`;
+    if (!confirm(msg + "\nTindakan ini tidak dapat dibatalkan.")) return;
+
+    try {
+      const idsToClear = filteredAuditSnapshots.map(s => s.rawId || s.id);
+      for (const id of idsToClear) {
+        if (!String(id).startsWith('trx-demo')) {
+          await supabase.from('transactions').update({ snapshot_url: null }).eq('id', id);
+        }
+      }
+      setRawTransactions(prev => prev.map(t => idsToClear.includes(t.id) ? { ...t, snapshot_url: null } : t));
+      setSnapshots(prev => prev.filter(s => !idsToClear.includes(s.rawId || s.id)));
+      alert("✅ Seluruh gambar bukti CCTV berhasil dihapus!");
+    } catch (err: any) {
+      alert("Gagal menghapus gambar CCTV: " + (err?.message || "Error"));
+    }
+  };
+
+  // Handler untuk menghapus log fraud telegram
+  const handleDeleteFraudLog = async (alertItem: any) => {
+    if (!confirm(`Hapus log peringatan fraud "${alertItem.title}" (${alertItem.time} di ${alertItem.branch})?`)) return;
+    try {
+      const targetId = alertItem.id;
+      if (targetId && !String(targetId).startsWith('fraud-')) {
+        const { error } = await supabase
+          .from('transactions')
+          .delete()
+          .eq('id', targetId);
+        if (error) console.warn("Supabase delete warning:", error);
+      }
+      setRawTransactions(prev => prev.filter(t => t.id !== targetId));
+      setFraudLogs(prev => prev.filter(f => f.id !== targetId));
+      alert("✅ Log peringatan fraud berhasil dihapus!");
+    } catch (err: any) {
+      alert("Gagal menghapus log fraud: " + (err?.message || "Error"));
+    }
+  };
+
+
   const filteredAuditSnapshots = displayedSnapshots.filter(s => 
     !auditSearch || 
     (s.id && s.id.toLowerCase().includes(auditSearch.toLowerCase())) ||
@@ -913,6 +981,16 @@ export default function OwnerDashboard() {
                     <Send size={14} />
                     <span>Log Telegram Fraud ({filteredAuditFraud.length})</span>
                   </button>
+                  {auditView === "cctv" && filteredAuditSnapshots.length > 0 && (
+                    <button 
+                      onClick={handleClearAllCctvSnapshots}
+                      className="px-3 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-lg text-xs font-bold transition-all flex items-center space-x-1"
+                      title="Hapus semua foto CCTV periode ini"
+                    >
+                      <Trash2 size={13} />
+                      <span>Hapus Semua Foto</span>
+                    </button>
+                  )}
                   <button 
                     onClick={() => {
                       const newSimulatedAlert = {
@@ -941,25 +1019,45 @@ export default function OwnerDashboard() {
               {auditView === "cctv" ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
                   {filteredAuditSnapshots.map((snap, i) => (
-                    <div key={i} onClick={() => setSelectedSnapshot(snap.img || snap.url)} className="bg-white rounded-2xl overflow-hidden border border-gray-200 shadow-sm hover:shadow-lg transition-all group cursor-pointer">
+                    <div key={snap.id || i} onClick={() => setSelectedSnapshot(snap.img || snap.url)} className="bg-white rounded-2xl overflow-hidden border-2 border-gray-200 shadow-sm hover:shadow-lg transition-all group cursor-pointer relative flex flex-col justify-between">
                       <div className="relative aspect-video bg-gray-900 overflow-hidden">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={snap.img || snap.url} alt="CCTV" className="object-cover w-full h-full opacity-80 group-hover:scale-105 transition-transform duration-500" />
-                        <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm px-2 py-1 rounded text-xs font-bold text-white flex items-center">
+                        <img src={snap.img || snap.url} alt="CCTV" className="object-cover w-full h-full opacity-85 group-hover:scale-105 transition-transform duration-500" />
+                        <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-sm px-2 py-1 rounded text-xs font-bold text-white flex items-center">
                           <Camera size={12} className="mr-1 text-red-400" /> Bukti CCTV
                         </div>
+                        {/* Tombol Hapus Pojok Foto */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteCctvSnapshot(snap);
+                          }}
+                          title="Hapus foto bukti CCTV ini"
+                          className="absolute top-2 right-2 p-1.5 bg-red-600/90 hover:bg-red-700 text-white rounded-lg shadow-md transition-all sm:opacity-0 group-hover:opacity-100"
+                        >
+                          <Trash2 size={13} />
+                        </button>
                       </div>
-                      <div className="p-4 space-y-3">
+                      <div className="p-4 space-y-3 flex-1 flex flex-col justify-between">
                         <div className="flex justify-between items-start">
                           <div>
-                            <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-md">{snap.id}</span>
-                            <h3 className="font-black text-gray-900 mt-2">Rp {snap.amount.toLocaleString('id-ID')}</h3>
+                            <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2 py-1 rounded-md border border-blue-200">{snap.id}</span>
+                            <h3 className="font-black text-gray-900 mt-2 text-lg">Rp {snap.amount.toLocaleString('id-ID')}</h3>
                           </div>
-                          <span className="text-sm font-bold text-gray-400">{snap.time}</span>
+                          <span className="text-sm font-bold text-gray-700">{snap.time}</span>
                         </div>
-                        <div className="pt-3 border-t flex justify-between items-center text-xs text-gray-500 font-medium">
-                          <span className="flex items-center"><Building2 size={12} className="mr-1"/> {snap.branch}</span>
-                          <span className="flex items-center"><User size={12} className="mr-1"/> {snap.cashier}</span>
+                        <div className="pt-3 border-t border-gray-200 flex justify-between items-center text-xs text-gray-700 font-semibold">
+                          <span className="flex items-center"><Building2 size={12} className="mr-1 text-gray-500"/> {snap.branch}</span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteCctvSnapshot(snap);
+                            }}
+                            className="text-red-600 hover:text-red-800 font-bold hover:underline flex items-center space-x-1"
+                          >
+                            <Trash2 size={12} />
+                            <span>Hapus Foto</span>
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -1019,13 +1117,22 @@ export default function OwnerDashboard() {
                                 <CheckCircle size={12} className="mr-1" /> Terkirim (@AlKahfiAlertBot)
                               </span>
                             </td>
-                            <td className="p-4 text-right space-x-2">
-                              <button 
-                                onClick={() => setSelectedFraudModal(alert)}
-                                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm"
-                              >
-                                Detail & CCTV
-                              </button>
+                            <td className="p-4 text-right">
+                              <div className="flex justify-end items-center space-x-2">
+                                <button 
+                                  onClick={() => setSelectedFraudModal(alert)}
+                                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm"
+                                >
+                                  Detail & CCTV
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteFraudLog(alert)}
+                                  className="p-1.5 text-red-600 hover:bg-red-50 hover:text-red-700 rounded-lg border border-red-200 text-xs font-bold transition-all"
+                                  title="Hapus log fraud ini"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -1748,9 +1855,28 @@ export default function OwnerDashboard() {
       {selectedSnapshot && (
         <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => setSelectedSnapshot(null)}>
           <div className="relative max-w-5xl w-full" onClick={e => e.stopPropagation()}>
-            <button onClick={() => setSelectedSnapshot(null)} className="absolute -top-12 right-0 text-white hover:text-gray-300 font-bold text-sm bg-white/10 px-4 py-2 rounded-lg backdrop-blur-md">
-              Tutup (Esc)
-            </button>
+            <div className="absolute -top-12 right-0 flex space-x-2">
+              <button 
+                onClick={async () => {
+                  if (!confirm("Hapus foto CCTV ini dari sistem?")) return;
+                  const matchingTrx = rawTransactions.find(t => t.snapshot_url === selectedSnapshot);
+                  if (matchingTrx) {
+                    await supabase.from('transactions').update({ snapshot_url: null }).eq('id', matchingTrx.id);
+                    setRawTransactions(prev => prev.map(t => t.id === matchingTrx.id ? { ...t, snapshot_url: null } : t));
+                  }
+                  setSnapshots(prev => prev.filter(s => (s.img || s.url) !== selectedSnapshot));
+                  setSelectedSnapshot(null);
+                  alert("✅ Gambar berhasil dihapus!");
+                }}
+                className="text-red-300 hover:text-red-100 font-bold text-sm bg-red-950/70 border border-red-800/80 px-4 py-2 rounded-lg backdrop-blur-md flex items-center space-x-1.5"
+              >
+                <Trash2 size={14} />
+                <span>Hapus Gambar</span>
+              </button>
+              <button onClick={() => setSelectedSnapshot(null)} className="text-white hover:text-gray-300 font-bold text-sm bg-white/10 px-4 py-2 rounded-lg backdrop-blur-md">
+                Tutup (Esc)
+              </button>
+            </div>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={selectedSnapshot} alt="CCTV Full Res" className="w-full h-auto max-h-[85vh] object-contain rounded-xl shadow-2xl border border-white/10" />
             <div className="absolute bottom-0 inset-x-0 p-4 bg-gradient-to-t from-black/80 to-transparent text-white rounded-b-xl">
@@ -1829,9 +1955,32 @@ export default function OwnerDashboard() {
               {/* Snapshot preview if available */}
               {selectedFraudModal.snapshotUrl && (
                 <div>
-                  <p className="text-xs font-bold text-gray-700 mb-1.5 flex items-center">
-                    <Camera size={14} className="mr-1 text-blue-600" /> Bukti Foto CCTV Terkait:
-                  </p>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <p className="text-xs font-bold text-gray-700 flex items-center">
+                      <Camera size={14} className="mr-1 text-blue-600" /> Bukti Foto CCTV Terkait:
+                    </p>
+                    <button
+                      onClick={async () => {
+                        if (!confirm("Hapus gambar bukti dari log fraud ini?")) return;
+                        try {
+                          const targetId = selectedFraudModal.id;
+                          if (targetId && !String(targetId).startsWith('fraud-')) {
+                            await supabase.from('transactions').update({ snapshot_url: null }).eq('id', targetId);
+                          }
+                          setRawTransactions(prev => prev.map(t => t.id === targetId ? { ...t, snapshot_url: null } : t));
+                          setFraudLogs(prev => prev.map(f => f.id === targetId ? { ...f, snapshotUrl: null } : f));
+                          setSelectedFraudModal((prev: any) => prev ? { ...prev, snapshotUrl: null } : null);
+                          alert("✅ Gambar bukti fraud berhasil dihapus!");
+                        } catch (err: any) {
+                          alert("Gagal menghapus gambar: " + (err?.message || "Error"));
+                        }
+                      }}
+                      className="text-xs font-bold text-red-600 hover:text-red-800 hover:underline flex items-center space-x-1"
+                    >
+                      <Trash2 size={12} />
+                      <span>Hapus Gambar Bukti</span>
+                    </button>
+                  </div>
                   <div 
                     onClick={() => setSelectedSnapshot(selectedFraudModal.snapshotUrl)}
                     className="relative aspect-video rounded-xl overflow-hidden border border-gray-200 cursor-pointer group"
