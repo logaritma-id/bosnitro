@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { uploadSnapshot } from "@/lib/cloudinary";
 import { printReceipt, connectPrinter, activePrinterDevice } from "@/lib/print";
-import { Camera, Printer, ShoppingCart, Info, ScanLine, User, MapPin, Wifi, Bluetooth, Plus, Minus, Trash2, XCircle, RefreshCcw, Video, ChevronLeft, Wrench, CheckCircle, Lock, Unlock, LogOut } from "lucide-react";
+import { Camera, Printer, ShoppingCart, Info, ScanLine, User, MapPin, Wifi, Bluetooth, Plus, Minus, Trash2, XCircle, RefreshCcw, Video, ChevronLeft, ChevronRight, Wrench, CheckCircle, Lock, Unlock, LogOut } from "lucide-react";
 
 import { getProducts, saveProducts, getOperators, getBranches, getCustomers, saveCustomers } from "@/lib/localDb";
 
@@ -813,41 +813,73 @@ export default function KasirPage() {
             {activeTab === "nitrogen" && (
               <div className="flex flex-col h-full">
                 {vehicleType === null ? (
-                  <div className="grid grid-cols-2 gap-4 h-full p-2">
+                  <div className="grid grid-cols-2 gap-4 md:gap-6 h-full p-2">
                     <button 
                       onClick={() => setVehicleType("motor")}
-                      className="bg-white border-2 border-gray-100 rounded-3xl hover:border-blue-500 hover:shadow-xl transition-all flex flex-col items-center justify-center p-6 group"
+                      className="bg-[#EFF6FD] border-2 border-slate-100 rounded-3xl hover:border-blue-500 hover:shadow-xl transition-all flex flex-col justify-between p-5 md:p-6 text-left group cursor-pointer"
                     >
-                      <div className="w-24 h-24 sm:w-32 sm:h-32 bg-blue-50 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                        <span className="text-5xl sm:text-7xl">🏍️</span>
+                      <div className="w-full flex-1 flex items-center justify-center py-2 sm:py-4">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img 
+                          src="/images/motor-nitrogen.png" 
+                          alt="Layanan Motor" 
+                          className="w-full max-w-[200px] sm:max-w-[240px] md:max-w-[260px] h-auto object-contain group-hover:scale-105 transition-transform duration-300" 
+                        />
                       </div>
-                      <span className="font-black text-xl sm:text-2xl text-gray-800">Motor</span>
-                      <span className="text-gray-700 font-bold text-sm mt-1">Pilih layanan Motor</span>
+                      <div className="flex items-center justify-between w-full mt-2">
+                        <div>
+                          <h3 className="font-black text-xl sm:text-2xl text-slate-900 tracking-tight">Motor</h3>
+                          <p className="text-slate-500 font-semibold text-xs sm:text-sm mt-0.5">Pilih layanan Motor</p>
+                        </div>
+                        <div className="w-10 h-10 rounded-full bg-[#E1EEFD] group-hover:bg-blue-600 text-blue-600 group-hover:text-white flex items-center justify-center transition-all shrink-0 shadow-sm">
+                          <ChevronRight size={20} strokeWidth={2.5} />
+                        </div>
+                      </div>
                     </button>
                     
                     <button 
                       onClick={() => setVehicleType("mobil")}
-                      className="bg-white border-2 border-gray-100 rounded-3xl hover:border-blue-500 hover:shadow-xl transition-all flex flex-col items-center justify-center p-6 group"
+                      className="bg-[#EFF6FD] border-2 border-slate-100 rounded-3xl hover:border-blue-500 hover:shadow-xl transition-all flex flex-col justify-between p-5 md:p-6 text-left group cursor-pointer"
                     >
-                      <div className="w-24 h-24 sm:w-32 sm:h-32 bg-blue-50 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                        <span className="text-5xl sm:text-7xl">🚗</span>
+                      <div className="w-full flex-1 flex items-center justify-center py-2 sm:py-4">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img 
+                          src="/images/mobil-nitrogen.png" 
+                          alt="Layanan Mobil" 
+                          className="w-full max-w-[200px] sm:max-w-[240px] md:max-w-[260px] h-auto object-contain group-hover:scale-105 transition-transform duration-300" 
+                        />
                       </div>
-                      <span className="font-black text-xl sm:text-2xl text-gray-800">Mobil</span>
-                      <span className="text-gray-700 font-bold text-sm mt-1">Pilih layanan Mobil</span>
+                      <div className="flex items-center justify-between w-full mt-2">
+                        <div>
+                          <h3 className="font-black text-xl sm:text-2xl text-slate-900 tracking-tight">Mobil</h3>
+                          <p className="text-slate-500 font-semibold text-xs sm:text-sm mt-0.5">Pilih layanan Mobil</p>
+                        </div>
+                        <div className="w-10 h-10 rounded-full bg-[#E1EEFD] group-hover:bg-blue-600 text-blue-600 group-hover:text-white flex items-center justify-center transition-all shrink-0 shadow-sm">
+                          <ChevronRight size={20} strokeWidth={2.5} />
+                        </div>
+                      </div>
                     </button>
                   </div>
                 ) : (
                   <>
-                    <div className="flex items-center space-x-3 mb-4 bg-gray-50 p-2 rounded-xl">
+                    <div className="flex items-center space-x-3 mb-4 bg-gray-50 p-2.5 rounded-xl border border-gray-100">
                       <button 
                         onClick={() => setVehicleType(null)} 
-                        className="p-3 bg-white border shadow-sm rounded-lg hover:bg-gray-100 font-bold text-gray-600 transition-all"
+                        className="px-3 py-2 bg-white border border-gray-200 shadow-sm rounded-lg hover:bg-gray-100 font-bold text-gray-700 transition-all text-sm flex items-center space-x-1 cursor-pointer"
                       >
-                         &larr; Kembali
+                        <ChevronLeft size={16} strokeWidth={2.5} />
+                        <span>Kembali</span>
                       </button>
-                      <div className="font-bold text-gray-800 text-lg flex items-center">
-                        <span className="mr-2 text-2xl">{vehicleType === 'motor' ? '🏍️' : '🚗'}</span>
-                        Varian Layanan {vehicleType.charAt(0).toUpperCase() + vehicleType.slice(1)}
+                      <div className="font-black text-gray-900 text-base sm:text-lg flex items-center">
+                        <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 mr-2.5 bg-blue-50 border border-blue-100 flex items-center justify-center">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img 
+                            src={vehicleType === 'motor' ? '/images/motor-nitrogen.png' : '/images/mobil-nitrogen.png'} 
+                            alt={vehicleType} 
+                            className="w-full h-full object-contain"
+                          />
+                        </div>
+                        <span>Varian Layanan {vehicleType.charAt(0).toUpperCase() + vehicleType.slice(1)}</span>
                       </div>
                     </div>
                     
