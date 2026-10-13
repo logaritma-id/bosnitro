@@ -1198,39 +1198,48 @@ export default function OwnerDashboard() {
                </div>
                <div className="overflow-x-auto">
                  <table className="w-full text-left border-collapse whitespace-nowrap">
-                   <thead>
-                     <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
-                       <th className="p-4 font-bold border-b">Nama Cabang</th>
-                       <th className="p-4 font-bold border-b">Status Hardware</th>
-                       <th className="p-4 font-bold border-b">IP Mesin (Lokal)</th>
-                       <th className="p-4 font-bold border-b text-right">Aksi</th>
-                     </tr>
-                   </thead>
-                   <tbody className="divide-y divide-gray-100">
-                     {displayedBranches.map((branch, i) => (
-                       <tr key={i} className="hover:bg-slate-50 transition-colors">
-                         <td className="p-4 font-bold text-gray-900 flex items-center space-x-3">
-                           <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center"><Building2 size={16} /></div>
-                           <span>{branch.name}</span>
-                         </td>
-                         <td className="p-4">
-                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${branch.status === 'Online' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                            ● {branch.status}
-                           </span>
-                            {branch.lastActive && (
-                              <div className="text-[10px] text-gray-500 font-medium mt-1">
-                                Heartbeat: {branch.lastActive}
-                              </div>
-                            )}
-                         </td>
-                         <td className="p-4 font-mono text-sm text-gray-500">192.168.1.{100 + i}</td>
-                         <td className="p-4 text-right">
-                           <button onClick={() => setSelectedBranchConfig({...branch, index: i})} className="text-blue-600 font-bold text-sm hover:text-blue-800">Konfigurasi</button>
-                         </td>
-                       </tr>
-                     ))}
-                   </tbody>
-                 </table>
+                    <thead>
+                      <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
+                        <th className="p-4 font-bold border-b">Nama Cabang</th>
+                        <th className="p-4 font-bold border-b">Node IoT (ESP32)</th>
+                        <th className="p-4 font-bold border-b">Status Hardware</th>
+                        <th className="p-4 font-bold border-b">Mode Sinkronisasi</th>
+                        <th className="p-4 font-bold border-b text-right">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {displayedBranches.map((branch, i) => {
+                        const deviceCode = branch.deviceCode || (branch.name === 'Tambun 1' ? 'NITRO-01' : `NITRO-0${i + 1}`);
+                        return (
+                          <tr key={i} className="hover:bg-slate-50 transition-colors">
+                            <td className="p-4 font-bold text-gray-900 flex items-center space-x-3">
+                              <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center"><Building2 size={16} /></div>
+                              <span>{branch.name}</span>
+                            </td>
+                            <td className="p-4 font-mono font-bold text-xs text-blue-700">
+                              {deviceCode}
+                            </td>
+                            <td className="p-4">
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${branch.status === 'Online' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                ● {branch.status}
+                              </span>
+                              {branch.lastActive && (
+                                <div className="text-[10px] text-gray-500 font-medium mt-1">
+                                  Heartbeat: {branch.lastActive}
+                                </div>
+                              )}
+                            </td>
+                            <td className="p-4 text-xs font-semibold text-gray-600">
+                              Supabase REST (System A)
+                            </td>
+                            <td className="p-4 text-right">
+                              <button onClick={() => setSelectedBranchConfig({...branch, deviceCode, index: i})} className="text-blue-600 font-bold text-sm hover:text-blue-800">Konfigurasi</button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                </div>
             </div>
           )}
@@ -1644,39 +1653,66 @@ export default function OwnerDashboard() {
       {/* Branch Configuration Modal */}
       {selectedBranchConfig && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="font-bold text-lg text-gray-800">Konfigurasi {selectedBranchConfig.name}</h3>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h3 className="font-bold text-lg text-gray-800">Konfigurasi Node IoT: {selectedBranchConfig.name}</h3>
+                <p className="text-xs text-gray-400">Sinkronisasi Hardware ESP32 & Solenoid Valve</p>
+              </div>
               <button onClick={() => setSelectedBranchConfig(null)} className="text-gray-400 hover:text-gray-600">
                 <X size={20} />
               </button>
             </div>
             
             <div className="space-y-4">
-              <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg">
-                <p className="text-xs font-bold text-blue-700 mb-1">Status Keamanan Mesin (System A)</p>
-                <p className="text-xs text-blue-600">Cabang ini menggunakan sistem pemutus arus kompresor otomatis (Smart Plug). Pastikan IP Statis sesuai dengan setting router Mikrotik.</p>
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl">
+                <p className="text-xs font-bold text-blue-800 mb-1">Status Sinkronisasi ESP32 (System A - Time Starvation)</p>
+                <p className="text-xs text-blue-700 leading-relaxed">
+                  ESP32 terhubung langsung ke Cloud Supabase (tabel <b>branch_devices</b>). Saat kasir memproses pengerjaan, status berubah ke <b>ACTIVE</b> dan ESP32 akan membuka solenoid valve pada GPIO 4 secara otomatis.
+                </p>
               </div>
               
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">Nama Cabang</label>
-                <input type="text" value={selectedBranchConfig.name} onChange={(e) => setSelectedBranchConfig({...selectedBranchConfig, name: e.target.value})} className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-sm text-gray-900" />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Nama Cabang</label>
+                  <input type="text" value={selectedBranchConfig.name} onChange={(e) => setSelectedBranchConfig({...selectedBranchConfig, name: e.target.value})} className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-sm text-gray-900" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Device Code (ESP32 Node ID)</label>
+                  <input type="text" value={selectedBranchConfig.deviceCode || 'NITRO-01'} onChange={(e) => setSelectedBranchConfig({...selectedBranchConfig, deviceCode: e.target.value})} className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-mono font-bold text-sm text-blue-800" />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">IP Address Smart Plug (Kompresor)</label>
-                <input type="text" defaultValue="192.168.1.100" className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-mono text-sm text-gray-900" />
+              {/* Status Hardware Real-time Box */}
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs">
+                <div className="flex justify-between items-center mb-1.5">
+                  <span className="text-gray-500 font-medium">Status Real Perangkat:</span>
+                  <span className={`px-2 py-0.5 rounded-full font-bold text-[11px] ${selectedBranchConfig.status === 'Online' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                    ● {selectedBranchConfig.status || 'Offline'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center mb-1.5">
+                  <span className="text-gray-500 font-medium">Device Relay State:</span>
+                  <span className="font-mono font-bold text-gray-800">{selectedBranchConfig.deviceStatus || 'IDLE'}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-500 font-medium">Heartbeat Terakhir:</span>
+                  <span className="font-semibold text-gray-700">{selectedBranchConfig.lastActive || 'Belum ada heartbeat'}</span>
+                </div>
               </div>
-              
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">IP Address CCTV (RTSP Stream)</label>
-                <input type="text" defaultValue="192.168.1.200" className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-mono text-sm text-gray-900" />
+
+              {/* Panduan WiFi Setup Box */}
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs">
+                <p className="font-bold text-amber-900 mb-0.5">WiFi Captive Portal ESP32 (WiFiManager):</p>
+                <p className="text-amber-800">
+                  Untuk hubungkan ESP32 baru ke WiFi outlet, sambungkan HP/Tablet ke hotspot: <b>AL-KAHFI-NITROGEN-SETUP</b> lalu buka browser di IP <b>192.168.4.1</b>.
+                </p>
               </div>
-              
-              <div className="flex items-center justify-between pt-2">
+
+              <div className="flex items-center justify-between pt-1">
                 <div>
                   <p className="font-bold text-gray-800 text-sm">Status Cabang Aktif</p>
-                  <p className="text-xs text-gray-500">Nonaktifkan untuk maintenance</p>
+                  <p className="text-xs text-gray-500">Nonaktifkan untuk perawatan berkala</p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input type="checkbox" checked={selectedBranchConfig.status === 'Online'} onChange={(e) => setSelectedBranchConfig({...selectedBranchConfig, status: e.target.checked ? 'Online' : 'Offline'})} className="sr-only peer" />
@@ -1685,21 +1721,58 @@ export default function OwnerDashboard() {
               </div>
             </div>
             
-            <div className="mt-6 pt-4 border-t flex justify-end space-x-3">
-              <button onClick={() => setSelectedBranchConfig(null)} className="px-4 py-2 font-bold text-gray-600 hover:bg-gray-100 rounded-lg text-sm">Batal</button>
-              <button onClick={() => {
-                setBranchStats((prev: any) => {
-                  const newStats = [...prev];
-                  newStats[selectedBranchConfig.index] = { ...selectedBranchConfig };
-                  delete newStats[selectedBranchConfig.index].index;
-                  
-                  saveBranches(newStats);
-                  
-                  return newStats;
-                });
-                alert(`Konfigurasi untuk ${selectedBranchConfig.name} berhasil disimpan dan disinkronisasi ke perangkat!`);
-                setSelectedBranchConfig(null);
-              }} className="px-4 py-2 font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow text-sm">Simpan</button>
+            <div className="mt-6 pt-4 border-t flex flex-col sm:flex-row justify-between items-center gap-2">
+              <button 
+                type="button"
+                onClick={async () => {
+                  try {
+                    const devCode = selectedBranchConfig.deviceCode || 'NITRO-01';
+                    const { error } = await supabase
+                      .from('branch_devices')
+                      .update({
+                        device_status: 'ACTIVE',
+                        active_duration_seconds: 5,
+                        last_heartbeat: new Date().toISOString(),
+                        updated_at: new Date().toISOString()
+                      })
+                      .eq('device_code', devCode);
+                    if (error) throw error;
+                    alert(`⚡ Sinyal Test Terkirim!\n\nPerintah buka valve selama 5 detik telah dikirim ke perangkat ${devCode} via Supabase. Periksa apakah relay ESP32 menyala.`);
+                  } catch (err: any) {
+                    alert(`Gagal mengirim sinyal test: ${err?.message || 'Error koneksi Supabase'}`);
+                  }
+                }}
+                className="w-full sm:w-auto px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold shadow-sm transition-all flex items-center justify-center space-x-1"
+              >
+                <span>⚡ Test Buka Valve (5s)</span>
+              </button>
+
+              <div className="flex space-x-2 w-full sm:w-auto justify-end">
+                <button onClick={() => setSelectedBranchConfig(null)} className="px-4 py-2 font-bold text-gray-600 hover:bg-gray-100 rounded-lg text-sm">Batal</button>
+                <button onClick={async () => {
+                  try {
+                    const devCode = selectedBranchConfig.deviceCode || 'NITRO-01';
+                    await supabase
+                      .from('branch_devices')
+                      .update({
+                        updated_at: new Date().toISOString()
+                      })
+                      .eq('device_code', devCode);
+
+                    setBranchStats((prev) => {
+                      const newStats = [...prev];
+                      newStats[selectedBranchConfig.index] = { ...selectedBranchConfig };
+                      delete newStats[selectedBranchConfig.index].index;
+                      saveBranches(newStats);
+                      return newStats;
+                    });
+                    alert(`✅ Konfigurasi untuk ${selectedBranchConfig.name} (${devCode}) berhasil disimpan dan disinkronkan ke Cloud Supabase & ESP32!`);
+                    setSelectedBranchConfig(null);
+                  } catch (err: any) {
+                    alert(`Gagal menyimpan: ${err?.message || 'Error'}`);
+                  }
+                }} className="px-4 py-2 font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow text-sm">Simpan</button>
+              </div>
             </div>
           </div>
         </div>
