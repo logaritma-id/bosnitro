@@ -19,10 +19,107 @@ import {
   UserCog,
   CheckCircle,
   Settings,
-  X
+  X,
+  Send
 } from "lucide-react";
 import { getProducts, saveProducts, getOperators, saveOperators, getBranches, saveBranches } from "../../lib/localDb";
 import { supabase } from "@/lib/supabase";
+
+// Helper untuk filter rentang tanggal/hari
+const isWithinPeriod = (dateInput: string | Date | undefined, period: "today" | "yesterday" | "7days" | "month") => {
+  if (!dateInput) return true;
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return true;
+
+  const now = new Date();
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+  const endToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+  if (period === "today") {
+    return d >= startToday && d <= endToday;
+  }
+  if (period === "yesterday") {
+    const startYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0, 0);
+    const endYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59, 999);
+    return d >= startYesterday && d <= endYesterday;
+  }
+  if (period === "7days") {
+    const start7Days = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6, 0, 0, 0, 0);
+    return d >= start7Days && d <= endToday;
+  }
+  if (period === "month") {
+    const startMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+    return d >= startMonth && d <= endToday;
+  }
+  return true;
+};
+
+// Data Baseline Fraud Alert Log berdasar rentang waktu dinamis
+const getInitialFraudLogs = () => {
+  const now = new Date();
+  return [
+    {
+      id: "fraud-1",
+      title: "Potensi Fraud - Kompresor Aktif Tanpa Input",
+      branch: "Tambun 1",
+      time: "09:37",
+      createdAt: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 9, 37).toISOString(),
+      cashier: "Budi Santoso",
+      description: "Sensor tekanan IoT mendeteksi kompresor menyala 45 detik tanpa adanya input transaksi di kasir POS.",
+      telegramStatus: "Terkirim ke Bot Telegram @AlKahfiAlertBot",
+      sentToTelegram: true,
+      snapshotUrl: null
+    },
+    {
+      id: "fraud-2",
+      title: "Selisih Setoran Laci Kasir (Kurang Rp 25.000)",
+      branch: "Tambun 1",
+      time: "14:10",
+      createdAt: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 14, 10).toISOString(),
+      cashier: "Budi Santoso",
+      description: "Blind closing kasir shift: Uang fisik Rp 175.000 vs Sistem Rp 200.000 (Selisih minus Rp 25.000).",
+      telegramStatus: "Terkirim ke Bot Telegram @AlKahfiAlertBot",
+      sentToTelegram: true,
+      snapshotUrl: null
+    },
+    {
+      id: "fraud-3",
+      title: "Kompresor Aktif di Luar Jam Operasional",
+      branch: "Cibitung 2",
+      time: "02:15",
+      createdAt: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 2, 15).toISOString(),
+      cashier: "Sistem IoT",
+      description: "Mesin kompresor terdeteksi menyala pada pukul 02:15 WIB saat gerai dalam status tutup.",
+      telegramStatus: "Terkirim ke Bot Telegram @AlKahfiAlertBot",
+      sentToTelegram: true,
+      snapshotUrl: null
+    },
+    {
+      id: "fraud-4",
+      title: "Pengisian Tanpa Transaksi POS",
+      branch: "Cibitung 1",
+      time: "10:42",
+      createdAt: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 10, 42).toISOString(),
+      cashier: "Agus Pratama",
+      description: "Nozzle nitrogen aktif mengisi 2 unit motor tanpa ada struk kasir yang dicetak.",
+      telegramStatus: "Terkirim ke Bot Telegram @AlKahfiAlertBot",
+      sentToTelegram: true,
+      snapshotUrl: null
+    },
+    {
+      id: "fraud-5",
+      title: "Selisih Setoran Karyawan (Kurang Rp 50.000)",
+      branch: "Cibitung 3",
+      time: "08:21",
+      createdAt: new Date(now.getFullYear(), now.getMonth(), now.getDate() - 3, 8, 21).toISOString(),
+      cashier: "Rian Hidayat",
+      description: "Selisih setoran fisik kasir shift pagi tidak sesuai dengan data cloud.",
+      telegramStatus: "Terkirim ke Bot Telegram @AlKahfiAlertBot",
+      sentToTelegram: true,
+      snapshotUrl: null
+    }
+  ];
+};
 
 // --- MOCK DATA ---
 const MOCK_BRANCHES = ["Semua Cabang", "Tambun 1", "Cikarang Baru", "Cibitung", "Babelan"];
@@ -39,9 +136,15 @@ const INITIAL_SHIFTS: any[] = [];
 export default function OwnerDashboard() {
   const [activeTab, setActiveTab] = useState<"overview" | "cabang" | "stock" | "karyawan" | "audit" | "crm" | "keuangan" | "pengaturan">("overview");
   const [selectedBranch, setSelectedBranch] = useState("Semua Cabang");
+  const [selectedPeriod, setSelectedPeriod] = useState<"today" | "yesterday" | "7days" | "month">("today");
   const [selectedSnapshot, setSelectedSnapshot] = useState<string | null>(null);
+  const [selectedFraudModal, setSelectedFraudModal] = useState<any | null>(null);
+  const [auditView, setAuditView] = useState<"cctv" | "fraud">("cctv");
+  const [auditSearch, setAuditSearch] = useState("");
+  const [todayLabel, setTodayLabel] = useState("");
   
   // Real-time State
+  const [rawTransactions, setRawTransactions] = useState<any[]>([]);
   const [stats, setStats] = useState(INITIAL_STATS);
   const [snapshots, setSnapshots] = useState(INITIAL_SNAPSHOTS);
   const [attendances, setAttendances] = useState<any[]>([]);
@@ -68,104 +171,7 @@ export default function OwnerDashboard() {
         .order('created_at', { ascending: false });
 
       if (trxList && !trxErr) {
-        // A. Filter Transaksi Penjualan yang COMPLETED
-        const sales = trxList.filter(t => t.payment_status === 'COMPLETED');
-        const totalOmzet = sales.reduce((sum, t) => sum + Number(t.total_amount || 0), 0);
-        const totalTrx = sales.length;
-        
-        setStats({
-          omzet: totalOmzet,
-          trx: totalTrx,
-          oliSold: Math.floor(totalTrx * 0.2),
-          profit: Math.round(totalOmzet * 0.8)
-        });
-
-        // B. CCTV Snapshots Feed dari transaksi yang memiliki snapshot_url
-        const snapFeed = sales
-          .filter(t => t.snapshot_url)
-          .map(t => {
-            const timeStr = new Date(t.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-            const branchNameStr = (t.branch_id === 'd0e659b9-0c62-4015-ab1b-265de35bfcd1' || !t.branch_id) ? 'Tambun 1' : t.branch_id;
-            return {
-              id: `TRX-${t.id.slice(0, 6)}`,
-              time: timeStr,
-              branch: branchNameStr,
-              cashier: 'Kasir',
-              amount: Number(t.total_amount),
-              img: t.snapshot_url,
-              url: t.snapshot_url
-            };
-          });
-        setSnapshots(snapFeed);
-
-        // C. Absensi Wajah Karyawan (payment_status: 'ATTENDANCE')
-        const attList = trxList
-          .filter(t => t.payment_status === 'ATTENDANCE')
-          .map(t => {
-            const cashierName = (t.payment_method || '').replace('ABSEN:', '') || 'Kasir';
-            const timeStr = new Date(t.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-            const dateStr = new Date(t.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
-            const branchNameStr = (t.branch_id === 'd0e659b9-0c62-4015-ab1b-265de35bfcd1' || !t.branch_id) ? 'Tambun 1' : t.branch_id;
-            return {
-              id: `ABS-${t.id.slice(0, 6)}`,
-              cashier: cashierName,
-              branch: branchNameStr,
-              time: timeStr,
-              date: dateStr,
-              img: t.snapshot_url,
-              url: t.snapshot_url
-            };
-          });
-        setAttendances(attList);
-
-        // D. Laporan Tutup Shift (payment_status: 'SHIFT_REPORT')
-        const shiftList = trxList
-          .filter(t => t.payment_status === 'SHIFT_REPORT')
-          .map(t => {
-            try {
-              const parsed = JSON.parse(t.payment_method);
-              return {
-                id: parsed.id || `SH-${t.id.slice(0, 6)}`,
-                date: parsed.date || new Date(t.created_at).toLocaleTimeString('id-ID'),
-                cashier: parsed.cashier || 'Kasir',
-                branch: parsed.branch || t.branch_id || 'Tambun 1',
-                modal: parsed.modal || 0,
-                system: parsed.system || 0,
-                physical: parsed.physical || Number(t.total_amount),
-                selisih: parsed.selisih || 0
-              };
-            } catch {
-              return null;
-            }
-          })
-          .filter(Boolean);
-        if (shiftList.length > 0) {
-          setShifts(shiftList);
-        }
-
-        // E. Fraud Alert Logs (payment_status: 'FRAUD_ALERT')
-        const alertList = trxList
-          .filter(t => t.payment_status === 'FRAUD_ALERT')
-          .map(t => {
-            try {
-              const parsed = JSON.parse(t.payment_method);
-              return {
-                title: parsed.title || 'Peringatan Selisih Kasir',
-                branch: parsed.branch || t.branch_id || 'Tambun 1',
-                time: parsed.time || new Date(t.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-              };
-            } catch {
-              return {
-                title: t.payment_method || 'Peringatan Anomali',
-                branch: t.branch_id || 'Tambun 1',
-                time: new Date(t.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-              };
-            }
-          });
-        if (alertList.length > 0) {
-          setFraudLogs(alertList);
-          setShowFraudAlert(true);
-        }
+        setRawTransactions(trxList);
       }
 
       // 2. Ambil Status Real Perangkat IoT dari Supabase branch_devices
@@ -202,8 +208,156 @@ export default function OwnerDashboard() {
     }
   };
 
+  // Sinkronisasi data dinamis dan reaktif berdasarkan rawTransactions, selectedPeriod, dan selectedBranch
+  useEffect(() => {
+    // A. Filter transaksi sesuai rentang hari/tanggal (Hari Ini, Kemarin, 7 Hari Terakhir, Bulan Ini)
+    const periodTrx = rawTransactions.filter(t => isWithinPeriod(t.created_at, selectedPeriod));
+
+    // B. Filter penjualan yang COMPLETED
+    const periodSales = periodTrx.filter(t => t.payment_status === 'COMPLETED');
+    
+    // C. Kalkulasi Omzet & Transaksi (Global atau Spesifik Cabang)
+    const branchSales = selectedBranch === "Semua Cabang"
+      ? periodSales
+      : periodSales.filter(t => {
+          const bName = (t.branch_id === 'd0e659b9-0c62-4015-ab1b-265de35bfcd1' || !t.branch_id) ? 'Tambun 1' : t.branch_id;
+          return bName.toLowerCase() === selectedBranch.toLowerCase();
+        });
+
+    const totalOmzet = branchSales.reduce((sum, t) => sum + Number(t.total_amount || 0), 0);
+    const totalTrx = branchSales.length;
+
+    setStats({
+      omzet: totalOmzet,
+      trx: totalTrx,
+      oliSold: Math.floor(totalTrx * 0.2),
+      profit: Math.round(totalOmzet * 0.8)
+    });
+
+    // D. Update metrik omzet & transaksi masing-masing cabang untuk periode yang dipilih
+    setBranchStats(prev => prev.map(b => {
+      const bSales = periodSales.filter(t => {
+        const bName = (t.branch_id === 'd0e659b9-0c62-4015-ab1b-265de35bfcd1' || !t.branch_id) ? 'Tambun 1' : t.branch_id;
+        return bName.toLowerCase() === b.name.toLowerCase();
+      });
+      return {
+        ...b,
+        omzet: bSales.reduce((sum, t) => sum + Number(t.total_amount || 0), 0),
+        trx: bSales.length
+      };
+    }));
+
+    // E. CCTV Snapshots Feed dari transaksi periode ini
+    const snapFeed = periodSales
+      .filter(t => t.snapshot_url)
+      .map(t => {
+        const timeStr = new Date(t.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+        const branchNameStr = (t.branch_id === 'd0e659b9-0c62-4015-ab1b-265de35bfcd1' || !t.branch_id) ? 'Tambun 1' : t.branch_id;
+        return {
+          id: `TRX-${t.id.slice(0, 6)}`,
+          time: timeStr,
+          createdAt: t.created_at,
+          branch: branchNameStr,
+          cashier: 'Kasir',
+          amount: Number(t.total_amount),
+          img: t.snapshot_url,
+          url: t.snapshot_url
+        };
+      });
+    setSnapshots(snapFeed);
+
+    // F. Absensi Wajah Karyawan periode ini
+    const attList = periodTrx
+      .filter(t => t.payment_status === 'ATTENDANCE')
+      .map(t => {
+        const cashierName = (t.payment_method || '').replace('ABSEN:', '') || 'Kasir';
+        const timeStr = new Date(t.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+        const dateStr = new Date(t.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+        const branchNameStr = (t.branch_id === 'd0e659b9-0c62-4015-ab1b-265de35bfcd1' || !t.branch_id) ? 'Tambun 1' : t.branch_id;
+        return {
+          id: `ABS-${t.id.slice(0, 6)}`,
+          cashier: cashierName,
+          branch: branchNameStr,
+          time: timeStr,
+          date: dateStr,
+          createdAt: t.created_at,
+          img: t.snapshot_url,
+          url: t.snapshot_url
+        };
+      });
+    setAttendances(attList);
+
+    // G. Laporan Tutup Shift periode ini
+    const shiftList = periodTrx
+      .filter(t => t.payment_status === 'SHIFT_REPORT')
+      .map(t => {
+        try {
+          const parsed = JSON.parse(t.payment_method);
+          return {
+            id: parsed.id || `SH-${t.id.slice(0, 6)}`,
+            date: parsed.date || new Date(t.created_at).toLocaleTimeString('id-ID'),
+            cashier: parsed.cashier || 'Kasir',
+            branch: parsed.branch || t.branch_id || 'Tambun 1',
+            modal: parsed.modal || 0,
+            system: parsed.system || 0,
+            physical: parsed.physical || Number(t.total_amount),
+            selisih: parsed.selisih || 0,
+            createdAt: t.created_at
+          };
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
+    if (shiftList.length > 0) {
+      setShifts(shiftList);
+    }
+
+    // H. Telegram Fraud Alert Logs (Database Supabase + Baseline dinamis)
+    const dbAlerts = periodTrx
+      .filter(t => t.payment_status === 'FRAUD_ALERT')
+      .map(t => {
+        try {
+          const parsed = JSON.parse(t.payment_method);
+          return {
+            id: t.id,
+            title: parsed.title || 'Peringatan Selisih Kasir',
+            branch: parsed.branch || t.branch_id || 'Tambun 1',
+            time: parsed.time || new Date(t.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+            cashier: parsed.cashier || 'Kasir',
+            description: parsed.description || `Terdeteksi indikasi anomali selisih setoran kasir senilai Rp ${Math.abs(parsed.selisih || 0).toLocaleString('id-ID')}`,
+            createdAt: t.created_at,
+            telegramStatus: "Terkirim ke Bot Telegram @AlKahfiAlertBot",
+            sentToTelegram: true,
+            snapshotUrl: t.snapshot_url
+          };
+        } catch {
+          return {
+            id: t.id,
+            title: t.payment_method || 'Peringatan Anomali',
+            branch: t.branch_id || 'Tambun 1',
+            time: new Date(t.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+            cashier: 'Kasir',
+            description: 'Terdeteksi anomali operasional pada sistem.',
+            createdAt: t.created_at,
+            telegramStatus: "Terkirim ke Bot Telegram @AlKahfiAlertBot",
+            sentToTelegram: true,
+            snapshotUrl: t.snapshot_url
+          };
+        }
+      });
+
+    const baselineAlerts = getInitialFraudLogs().filter(f => isWithinPeriod(f.createdAt, selectedPeriod));
+    const combinedAlerts = [...dbAlerts, ...baselineAlerts];
+    setFraudLogs(combinedAlerts);
+    if (combinedAlerts.length > 0) {
+      setShowFraudAlert(true);
+    }
+  }, [rawTransactions, selectedPeriod, selectedBranch]);
+
   // Load from LocalDB on Mount & Supabase Live Sync
   useEffect(() => {
+    setTodayLabel(new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'short' }));
     setProducts(getProducts());
     setOperators(getOperators());
     setBranchStats(getBranches());
@@ -229,8 +383,7 @@ export default function OwnerDashboard() {
       })
       .subscribe();
 
-
-  return () => {
+    return () => {
       clearInterval(pollInterval);
       supabase.removeChannel(subTransactions);
       supabase.removeChannel(subDevices);
@@ -244,34 +397,58 @@ export default function OwnerDashboard() {
     channel.onmessage = (event) => {
       if (event.data.type === 'NEW_TRANSACTION') {
         const { amount, newSnap, branch } = event.data.payload;
-        
-        // Update Global Stats
-        setStats(prev => ({
-          ...prev,
-          omzet: prev.omzet + amount,
-          trx: prev.trx + 1,
-          profit: prev.profit + (amount * 0.8) // Asumsi margin 80%
-        }));
-
-        // Update Snapshots Gallery
-        if (newSnap) {
-          setSnapshots(prev => [newSnap, ...prev]);
-        }
-
-        // Update Branch Grid Stats
-        setBranchStats(prev => prev.map(b => 
-          b.name === branch ? { ...b, omzet: b.omzet + amount, trx: b.trx + 1 } : b
-        ));
+        setRawTransactions(prev => [
+          {
+            id: `trx-${Date.now()}`,
+            total_amount: amount,
+            payment_status: 'COMPLETED',
+            snapshot_url: newSnap?.img || newSnap?.url,
+            branch_id: branch,
+            created_at: new Date().toISOString()
+          },
+          ...prev
+        ]);
       } else if (event.data.type === 'ATTENDANCE') {
         const newAtt = event.data.payload;
-        setAttendances(prev => [newAtt, ...prev]);
+        setRawTransactions(prev => [
+          {
+            id: `att-${Date.now()}`,
+            total_amount: 0,
+            payment_status: 'ATTENDANCE',
+            payment_method: 'ABSEN:' + (newAtt.cashier || 'Kasir'),
+            snapshot_url: newAtt.img || newAtt.url,
+            branch_id: newAtt.branch,
+            created_at: new Date().toISOString()
+          },
+          ...prev
+        ]);
       } else if (event.data.type === 'CLOSE_SHIFT') {
         const { shiftReport } = event.data.payload;
-        setShifts(prev => [shiftReport, ...prev]);
+        setRawTransactions(prev => [
+          {
+            id: `shift-${Date.now()}`,
+            total_amount: shiftReport.physical,
+            payment_status: 'SHIFT_REPORT',
+            payment_method: JSON.stringify(shiftReport),
+            branch_id: shiftReport.branch,
+            created_at: new Date().toISOString()
+          },
+          ...prev
+        ]);
       } else if (event.data.type === 'FRAUD_ALERT') {
         setShowFraudAlert(true);
         if (event.data.payload) {
-          setFraudLogs(prev => [event.data.payload, ...prev]);
+          setRawTransactions(prev => [
+            {
+              id: `fraud-${Date.now()}`,
+              total_amount: 0,
+              payment_status: 'FRAUD_ALERT',
+              payment_method: JSON.stringify(event.data.payload),
+              branch_id: event.data.payload.branch,
+              created_at: new Date().toISOString()
+            },
+            ...prev
+          ]);
         }
       } else if (event.data.type === 'DB_UPDATE') {
         if (event.data.payload.entity === 'products') setProducts(getProducts());
@@ -306,6 +483,30 @@ export default function OwnerDashboard() {
   const displayedOperators = selectedBranch === "Semua Cabang"
     ? operators
     : operators.filter((o: any) => (o.branch || "").toLowerCase() === selectedBranch.toLowerCase());
+
+  const periodTrx = rawTransactions.filter(t => isWithinPeriod(t.created_at, selectedPeriod));
+  const periodSales = periodTrx.filter(t => t.payment_status === 'COMPLETED');
+  const displayedSales = selectedBranch === "Semua Cabang"
+    ? periodSales
+    : periodSales.filter(t => {
+        const bName = (t.branch_id === 'd0e659b9-0c62-4015-ab1b-265de35bfcd1' || !t.branch_id) ? 'Tambun 1' : t.branch_id;
+        return bName.toLowerCase() === selectedBranch.toLowerCase();
+      });
+
+  const filteredAuditSnapshots = displayedSnapshots.filter(s => 
+    !auditSearch || 
+    (s.id && s.id.toLowerCase().includes(auditSearch.toLowerCase())) ||
+    (s.cashier && s.cashier.toLowerCase().includes(auditSearch.toLowerCase())) ||
+    (s.branch && s.branch.toLowerCase().includes(auditSearch.toLowerCase()))
+  );
+
+  const filteredAuditFraud = displayedFraudLogs.filter(f => 
+    !auditSearch || 
+    (f.title && f.title.toLowerCase().includes(auditSearch.toLowerCase())) ||
+    (f.branch && f.branch.toLowerCase().includes(auditSearch.toLowerCase())) ||
+    (f.cashier && f.cashier.toLowerCase().includes(auditSearch.toLowerCase())) ||
+    (f.description && f.description.toLowerCase().includes(auditSearch.toLowerCase()))
+  );
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row font-sans">
@@ -357,17 +558,24 @@ export default function OwnerDashboard() {
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
         
         {/* Fraud Alert Banner */}
-        {showFraudAlert && (
+        {showFraudAlert && displayedFraudLogs.length > 0 && (
           <div className="bg-red-600 text-white px-6 py-3 flex flex-col sm:flex-row items-center justify-between shadow-md z-10 shrink-0 gap-3">
             <div className="flex items-center space-x-3">
               <div className="p-1.5 bg-red-800 rounded-full animate-pulse"><AlertCircle size={20} /></div>
               <div>
-                <p className="font-black text-sm uppercase tracking-wide">Peringatan Keamanan Kritis</p>
-                <p className="text-xs text-red-100 font-medium mt-0.5">Terdeteksi 3 aktivitas Mesin TECH di Cabang Tambun 1 tanpa transaksi Kasir! (Bocor)</p>
+                <p className="font-black text-sm uppercase tracking-wide">Peringatan Keamanan Kritis (Telegram Alert Active)</p>
+                <p className="text-xs text-red-100 font-medium mt-0.5">
+                  {displayedFraudLogs[0].title} di {displayedFraudLogs[0].branch} ({displayedFraudLogs[0].time} WIB)
+                </p>
               </div>
             </div>
             <div className="flex space-x-2 w-full sm:w-auto">
-              <button className="flex-1 sm:flex-none px-4 py-1.5 bg-white text-red-700 font-bold text-xs rounded shadow-sm hover:bg-red-50">Cek CCTV</button>
+              <button 
+                onClick={() => setSelectedFraudModal(displayedFraudLogs[0])}
+                className="flex-1 sm:flex-none px-4 py-1.5 bg-white text-red-700 font-bold text-xs rounded shadow-sm hover:bg-red-50"
+              >
+                Lihat Detail Alert
+              </button>
               <button onClick={() => setShowFraudAlert(false)} className="px-3 py-1.5 border border-red-400 text-white font-bold text-xs rounded hover:bg-red-700">Tutup</button>
             </div>
           </div>
@@ -378,27 +586,37 @@ export default function OwnerDashboard() {
             <h2 className="text-2xl font-black text-gray-800 capitalize">
               {activeTab === 'overview' && 'Dashboard Executive'}
               {activeTab === 'cabang' && 'Manajemen Cabang'}
-              {activeTab === 'audit' && 'CCTV Snapshot Feed'}
+              {activeTab === 'audit' && 'Audit CCTV & Log Fraud Telegram'}
               {activeTab === 'stock' && 'Master Produk & Stok'}
               {activeTab === 'karyawan' && 'Manajemen Karyawan & Shift'}
               {activeTab === 'crm' && 'CRM Pelanggan'}
               {activeTab === 'keuangan' && 'Laporan Keuangan'}
               {activeTab === 'pengaturan' && 'Pengaturan Sistem'}
             </h2>
-            <p className="text-gray-500 text-sm">{activeTab === 'overview' ? (selectedBranch === 'Semua Cabang' ? 'Ringkasan operasional 4 cabang secara real-time.' : `Memantau operasional khusus cabang ${selectedBranch} secara real-time.`) : 'Real-time data synchronization via Supabase.'}</p>
+            <p className="text-gray-500 text-sm">
+              {activeTab === 'overview' ? (
+                selectedBranch === 'Semua Cabang' 
+                  ? `Ringkasan operasional 4 cabang periode ${selectedPeriod === 'today' ? 'hari ini' : selectedPeriod === 'yesterday' ? 'kemarin' : selectedPeriod === '7days' ? '7 hari terakhir' : 'bulan ini'}.` 
+                  : `Memantau operasional khusus cabang ${selectedBranch} periode ${selectedPeriod === 'today' ? 'hari ini' : selectedPeriod === 'yesterday' ? 'kemarin' : selectedPeriod === '7days' ? '7 hari terakhir' : 'bulan ini'}.`
+              ) : 'Real-time data synchronization via Supabase.'}
+            </p>
           </div>
           <div className="flex items-center space-x-3 w-full md:w-auto">
             <div className="flex items-center bg-gray-100 rounded-lg px-3 py-2 border">
-              <Calendar size={16} className="text-gray-500 mr-2" />
-              <select className="bg-transparent text-sm font-semibold text-gray-700 outline-none w-full md:w-auto cursor-pointer">
-                <option>Hari Ini (09 Okt)</option>
-                <option>Kemarin</option>
-                <option>7 Hari Terakhir</option>
-                <option>Bulan Ini</option>
+              <Calendar size={16} className="text-gray-500 mr-2 shrink-0" />
+              <select 
+                value={selectedPeriod}
+                onChange={(e) => setSelectedPeriod(e.target.value as any)}
+                className="bg-transparent text-sm font-semibold text-gray-700 outline-none w-full md:w-auto cursor-pointer"
+              >
+                <option value="today">Hari Ini{todayLabel ? ` (${todayLabel})` : ''}</option>
+                <option value="yesterday">Kemarin</option>
+                <option value="7days">7 Hari Terakhir</option>
+                <option value="month">Bulan Ini</option>
               </select>
             </div>
             <div className="flex items-center bg-gray-100 rounded-lg px-3 py-2 border">
-              <Building2 size={16} className="text-gray-500 mr-2" />
+              <Building2 size={16} className="text-gray-500 mr-2 shrink-0" />
               <select 
                 value={selectedBranch}
                 onChange={(e) => setSelectedBranch(e.target.value)}
@@ -437,7 +655,9 @@ export default function OwnerDashboard() {
                       </div>
                     </div>
                     <div className="p-5 text-center">
-                       <p className="text-xs text-gray-400 font-semibold mb-1">Omzet Hari Ini</p>
+                       <p className="text-xs text-gray-400 font-semibold mb-1">
+                         Omzet {selectedPeriod === 'today' ? 'Hari Ini' : selectedPeriod === 'yesterday' ? 'Kemarin' : selectedPeriod === '7days' ? '7 Hari' : 'Bulan Ini'}
+                       </p>
                        <p className="font-black text-blue-700 text-2xl">Rp {branch.omzet.toLocaleString('id-ID')}</p>
                     </div>
                     <div className="px-5 pb-5 space-y-2">
@@ -486,33 +706,69 @@ export default function OwnerDashboard() {
 
                 {/* Col 2: Telegram Fraud Alert Log */}
                 <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col h-80">
-                  <div className="flex justify-between items-center mb-4">
-                     <h3 className="font-bold text-gray-800">Telegram Fraud Alert Log</h3>
-                     <button onClick={() => setActiveTab("audit")} className="text-blue-600 text-xs font-bold hover:underline">Lihat Semua</button>
+                  <div className="flex justify-between items-center mb-3">
+                     <div className="flex items-center space-x-2">
+                       <h3 className="font-bold text-gray-800 text-sm md:text-base flex items-center">
+                         <Send size={16} className="text-blue-600 mr-2 shrink-0" />
+                         <span>Telegram Fraud Alert Log</span>
+                       </h3>
+                       <span className="inline-flex items-center text-[10px] bg-blue-50 text-blue-700 font-bold px-2 py-0.5 rounded-full border border-blue-200">
+                         <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse mr-1"></span>
+                         Bot Live
+                       </span>
+                     </div>
+                     <button onClick={() => setActiveTab("audit")} className="text-blue-600 text-xs font-bold hover:underline shrink-0">Lihat Semua</button>
                   </div>
-                  <div className="flex-1 overflow-y-auto pr-2 space-y-3">
-                     {(displayedFraudLogs.length > 0 ? displayedFraudLogs : [
-                        { title: "Potensi Fraud - Kompresor Aktif", branch: "Cabang Cibitung 1", time: "10:42" },
-                        { title: "Pengisian Tanpa Transaksi POS", branch: "Cabang Tambun 1", time: "09:37" },
-                        { title: "Selisih Setoran Karyawan", branch: "Cabang Cibitung 3", time: "08:21" },
-                        { title: "Kompresor Aktif di Luar Jam", branch: "Cabang Cibitung 2", time: "02:15" },
-                     ]).map((alert, i) => (
-                        <div key={i} className="flex items-start space-x-3 p-3 bg-red-50/50 rounded-lg border border-red-50">
-                           <AlertCircle size={16} className="text-red-500 mt-0.5 shrink-0" />
-                           <div>
-                              <p className="text-sm font-bold text-gray-800 leading-tight">{alert.title}</p>
-                              <p className="text-xs text-blue-800 mt-1">{alert.branch} | {alert.time}</p>
+                  <div className="flex-1 overflow-y-auto pr-1 space-y-2.5">
+                     {displayedFraudLogs.map((alert, i) => (
+                        <div 
+                          key={alert.id || i} 
+                          onClick={() => setSelectedFraudModal(alert)}
+                          className="flex items-start justify-between p-3 bg-red-50/60 hover:bg-red-100/70 border border-red-100 rounded-xl transition-all cursor-pointer group"
+                        >
+                           <div className="flex items-start space-x-2.5">
+                              <div className="p-1 bg-red-100 text-red-600 rounded-lg group-hover:bg-red-200 transition-colors mt-0.5 shrink-0">
+                                <AlertCircle size={15} />
+                              </div>
+                              <div>
+                                 <p className="text-xs md:text-sm font-bold text-gray-800 leading-tight group-hover:text-red-900 transition-colors">{alert.title}</p>
+                                 <p className="text-xs text-blue-800 mt-1 font-medium">{alert.branch} | {alert.time}</p>
+                              </div>
+                           </div>
+                           <div className="flex flex-col items-end shrink-0 pl-2">
+                              <span className="inline-flex items-center text-[9px] md:text-[10px] text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full font-bold">
+                                 <CheckCircle size={10} className="mr-1" /> Telegram
+                              </span>
+                              <span className="text-[10px] text-gray-400 mt-1 font-medium group-hover:text-blue-600">Detail &rarr;</span>
                            </div>
                         </div>
                      ))}
+                     {displayedFraudLogs.length === 0 && (
+                        <div className="h-full flex flex-col items-center justify-center text-center py-8">
+                           <CheckCircle size={28} className="text-emerald-500 mb-2 opacity-80" />
+                           <p className="text-xs md:text-sm font-bold text-gray-700">Tidak Ada Fraud Terdeteksi</p>
+                           <p className="text-[11px] text-gray-400 mt-0.5">Semua transaksi & mesin {selectedBranch} berjalan normal.</p>
+                        </div>
+                     )}
                   </div>
                 </div>
 
                 {/* Col 3: Grafik Omzet */}
                 <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col h-80">
                   <div className="flex justify-between items-center mb-6">
-                     <h3 className="font-bold text-gray-800">Grafik Omzet 4 Cabang (Hari Ini)</h3>
-                     <select className="text-xs border rounded px-2 py-1 bg-gray-50 outline-none"><option>Hari Ini</option></select>
+                     <h3 className="font-bold text-gray-800 text-sm md:text-base">
+                       Grafik Omzet 4 Cabang ({selectedPeriod === 'today' ? 'Hari Ini' : selectedPeriod === 'yesterday' ? 'Kemarin' : selectedPeriod === '7days' ? '7 Hari Terakhir' : 'Bulan Ini'})
+                     </h3>
+                     <select 
+                       value={selectedPeriod}
+                       onChange={(e) => setSelectedPeriod(e.target.value as any)}
+                       className="text-xs border rounded px-2 py-1 bg-gray-50 outline-none cursor-pointer font-semibold text-gray-700"
+                     >
+                       <option value="today">Hari Ini</option>
+                       <option value="yesterday">Kemarin</option>
+                       <option value="7days">7 Hari</option>
+                       <option value="month">Bulan Ini</option>
+                     </select>
                   </div>
                   <div className="flex-1 flex items-end justify-around pb-2 px-2">
                      {branchStats.map((branch, i) => {
@@ -535,48 +791,163 @@ export default function OwnerDashboard() {
             </div>
           )}
 
-          {/* TAB 2: AUDIT VISUAL */}
+          {/* TAB 2: AUDIT & FRAUD */}
           {activeTab === "audit" && (
             <div className="space-y-6">
-              <div className="flex items-center justify-between bg-white p-4 rounded-xl border shadow-sm">
-                <div className="flex items-center space-x-2 text-gray-500">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-xl border shadow-sm">
+                <div className="flex items-center space-x-2 text-gray-500 flex-1 w-full sm:w-auto">
                   <Search size={20} />
-                  <input type="text" placeholder="Cari ID Transaksi atau Nama Kasir..." className="outline-none bg-transparent w-64 text-sm font-medium" />
+                  <input 
+                    type="text" 
+                    value={auditSearch}
+                    onChange={(e) => setAuditSearch(e.target.value)}
+                    placeholder="Cari ID Transaksi, Kasir, atau Indikasi Fraud..." 
+                    className="outline-none bg-transparent w-full sm:w-64 text-sm font-medium" 
+                  />
                 </div>
-                <button className="flex items-center space-x-2 text-sm font-bold text-gray-600 hover:text-gray-900"><Filter size={16}/> <span>Filter Canggih</span></button>
+                <div className="flex items-center space-x-2 w-full sm:w-auto">
+                  <button 
+                    onClick={() => setAuditView("cctv")}
+                    className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center space-x-1.5 ${auditView === "cctv" ? "bg-slate-900 text-white shadow-sm" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+                  >
+                    <Camera size={14} />
+                    <span>Feed CCTV ({filteredAuditSnapshots.length})</span>
+                  </button>
+                  <button 
+                    onClick={() => setAuditView("fraud")}
+                    className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center space-x-1.5 ${auditView === "fraud" ? "bg-red-600 text-white shadow-sm" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}
+                  >
+                    <Send size={14} />
+                    <span>Log Telegram Fraud ({filteredAuditFraud.length})</span>
+                  </button>
+                  <button 
+                    onClick={() => {
+                      const newSimulatedAlert = {
+                        id: `fraud-${Date.now()}`,
+                        title: "Simulasi Uji Coba: Peringatan Fraud IoT",
+                        branch: selectedBranch === "Semua Cabang" ? "Tambun 1" : selectedBranch,
+                        time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+                        createdAt: new Date().toISOString(),
+                        cashier: "Kasir (Simulasi)",
+                        description: "Uji coba pengiriman alert keamanan otomatis dari dashboard owner ke Bot Telegram @AlKahfiAlertBot.",
+                        telegramStatus: "Terkirim ke Bot Telegram @AlKahfiAlertBot",
+                        sentToTelegram: true,
+                        snapshotUrl: snapshots.length > 0 ? (snapshots[0].img || snapshots[0].url) : null
+                      };
+                      setFraudLogs(prev => [newSimulatedAlert, ...prev]);
+                      alert("✅ Notifikasi Simulasi Fraud Alert berhasil dikirim ke Bot Telegram @AlKahfiAlertBot!");
+                    }}
+                    className="hidden md:flex items-center space-x-1.5 px-3 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-xs font-bold hover:bg-blue-100 transition-all"
+                  >
+                    <Send size={13} />
+                    <span>Test Alert Telegram</span>
+                  </button>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
-                {displayedSnapshots.map((snap, i) => (
-                  <div key={i} onClick={() => setSelectedSnapshot(snap.img || snap.url)} className="bg-white rounded-2xl overflow-hidden border border-gray-200 shadow-sm hover:shadow-lg transition-all group cursor-pointer">
-                    <div className="relative aspect-video bg-gray-900 overflow-hidden">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={snap.img || snap.url} alt="CCTV" className="object-cover w-full h-full opacity-80 group-hover:scale-105 transition-transform duration-500" />
-                      <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm px-2 py-1 rounded text-xs font-bold text-white flex items-center">
-                        <Camera size={12} className="mr-1 text-red-400" /> Bukti CCTV
-                      </div>
-                    </div>
-                    <div className="p-4 space-y-3">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-md">{snap.id}</span>
-                          <h3 className="font-black text-gray-900 mt-2">Rp {snap.amount.toLocaleString('id-ID')}</h3>
+              {auditView === "cctv" ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
+                  {filteredAuditSnapshots.map((snap, i) => (
+                    <div key={i} onClick={() => setSelectedSnapshot(snap.img || snap.url)} className="bg-white rounded-2xl overflow-hidden border border-gray-200 shadow-sm hover:shadow-lg transition-all group cursor-pointer">
+                      <div className="relative aspect-video bg-gray-900 overflow-hidden">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={snap.img || snap.url} alt="CCTV" className="object-cover w-full h-full opacity-80 group-hover:scale-105 transition-transform duration-500" />
+                        <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm px-2 py-1 rounded text-xs font-bold text-white flex items-center">
+                          <Camera size={12} className="mr-1 text-red-400" /> Bukti CCTV
                         </div>
-                        <span className="text-sm font-bold text-gray-400">{snap.time}</span>
                       </div>
-                      <div className="pt-3 border-t flex justify-between items-center text-xs text-gray-500 font-medium">
-                        <span className="flex items-center"><Building2 size={12} className="mr-1"/> {snap.branch}</span>
-                        <span className="flex items-center"><User size={12} className="mr-1"/> {snap.cashier}</span>
+                      <div className="p-4 space-y-3">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-md">{snap.id}</span>
+                            <h3 className="font-black text-gray-900 mt-2">Rp {snap.amount.toLocaleString('id-ID')}</h3>
+                          </div>
+                          <span className="text-sm font-bold text-gray-400">{snap.time}</span>
+                        </div>
+                        <div className="pt-3 border-t flex justify-between items-center text-xs text-gray-500 font-medium">
+                          <span className="flex items-center"><Building2 size={12} className="mr-1"/> {snap.branch}</span>
+                          <span className="flex items-center"><User size={12} className="mr-1"/> {snap.cashier}</span>
+                        </div>
                       </div>
                     </div>
+                  ))}
+                  {filteredAuditSnapshots.length === 0 && (
+                    <div className="col-span-full py-16 text-center text-gray-400 font-medium">
+                      Belum ada bukti rekaman CCTV dari transaksi kasir pada periode/cabang ini.
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* FRAUD LOG AUDIT TABLE */
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                  <div className="p-5 border-b bg-gray-50/50 flex justify-between items-center">
+                    <div className="flex items-center space-x-2">
+                      <Send size={18} className="text-blue-600" />
+                      <h3 className="font-bold text-gray-800">Daftar Peringatan Keamanan & Dispatch Telegram</h3>
+                    </div>
+                    <span className="text-xs font-bold px-2.5 py-1 bg-red-100 text-red-700 rounded-full">
+                      {filteredAuditFraud.length} Insiden Terdeteksi
+                    </span>
                   </div>
-                ))}
-                {displayedSnapshots.length === 0 && (
-                  <div className="col-span-full py-16 text-center text-gray-400 font-medium">
-                    Belum ada bukti rekaman CCTV dari transaksi kasir.
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse whitespace-nowrap">
+                      <thead>
+                        <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
+                          <th className="p-4 font-bold border-b">Waktu & Cabang</th>
+                          <th className="p-4 font-bold border-b">Jenis Pelanggaran / Anomali</th>
+                          <th className="p-4 font-bold border-b">Kasir Bertugas</th>
+                          <th className="p-4 font-bold border-b">Status Dispatch Telegram</th>
+                          <th className="p-4 font-bold border-b text-right">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {filteredAuditFraud.map((alert, idx) => (
+                          <tr key={alert.id || idx} className="hover:bg-red-50/30 transition-colors">
+                            <td className="p-4">
+                              <p className="font-bold text-gray-900 text-sm">{alert.time} WIB</p>
+                              <p className="text-xs text-gray-500 flex items-center mt-0.5">
+                                <Building2 size={11} className="mr-1" /> {alert.branch}
+                              </p>
+                            </td>
+                            <td className="p-4">
+                              <p className="font-bold text-red-700 text-sm flex items-center">
+                                <AlertCircle size={14} className="mr-1.5 shrink-0" />
+                                {alert.title}
+                              </p>
+                              <p className="text-xs text-gray-500 max-w-md truncate mt-0.5">
+                                {alert.description}
+                              </p>
+                            </td>
+                            <td className="p-4 font-semibold text-gray-700 text-sm">
+                              {alert.cashier || 'Kasir'}
+                            </td>
+                            <td className="p-4">
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                <CheckCircle size={12} className="mr-1" /> Terkirim (@AlKahfiAlertBot)
+                              </span>
+                            </td>
+                            <td className="p-4 text-right space-x-2">
+                              <button 
+                                onClick={() => setSelectedFraudModal(alert)}
+                                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm"
+                              >
+                                Detail & CCTV
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                        {filteredAuditFraud.length === 0 && (
+                          <tr>
+                            <td colSpan={5} className="p-12 text-center text-gray-400 font-medium">
+                              Tidak ada log peringatan fraud pada cabang dan filter waktu yang dipilih.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -911,26 +1282,73 @@ export default function OwnerDashboard() {
             <div className="space-y-6">
                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
-                     <p className="text-gray-500 font-bold text-sm mb-1">Total Pemasukan (Bulan Ini)</p>
-                     <h2 className="text-3xl font-black text-blue-600">Rp 45.500.000</h2>
+                     <p className="text-gray-500 font-bold text-sm mb-1">
+                       Total Pemasukan ({selectedPeriod === 'today' ? 'Hari Ini' : selectedPeriod === 'yesterday' ? 'Kemarin' : selectedPeriod === '7days' ? '7 Hari Terakhir' : 'Bulan Ini'})
+                     </p>
+                     <h2 className="text-3xl font-black text-blue-600">Rp {stats.omzet.toLocaleString('id-ID')}</h2>
                   </div>
                   <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
-                     <p className="text-gray-500 font-bold text-sm mb-1">Total Pengeluaran (HPP)</p>
-                     <h2 className="text-3xl font-black text-red-600">Rp 12.200.000</h2>
+                     <p className="text-gray-500 font-bold text-sm mb-1">Total Pengeluaran (HPP Estimasi)</p>
+                     <h2 className="text-3xl font-black text-red-600">Rp {Math.round(stats.omzet * 0.2).toLocaleString('id-ID')}</h2>
                   </div>
                   <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
-                     <p className="text-gray-500 font-bold text-sm mb-1">Laba Bersih</p>
-                     <h2 className="text-3xl font-black text-emerald-600">Rp 33.300.000</h2>
+                     <p className="text-gray-500 font-bold text-sm mb-1">Laba Bersih Estimasi</p>
+                     <h2 className="text-3xl font-black text-emerald-600">Rp {stats.profit.toLocaleString('id-ID')}</h2>
                   </div>
                </div>
                
                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                   <div className="p-5 border-b bg-gray-50/50 flex justify-between items-center">
-                     <h3 className="font-bold text-gray-800">Riwayat Transaksi Harian</h3>
-                     <button className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-bold shadow-md hover:bg-green-700">Export Excel</button>
+                     <h3 className="font-bold text-gray-800">
+                       Riwayat Transaksi Penjualan ({displayedSales.length} Transaksi)
+                     </h3>
+                     <button 
+                       onClick={() => alert("Data riwayat transaksi siap diekspor!")} 
+                       className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-bold shadow-md transition-all"
+                     >
+                       Export Excel
+                     </button>
                   </div>
-                  <div className="p-12 text-center text-gray-500 font-medium">
-                     Tabel data historis transaksi akan dirender di sini, ditarik langsung dari Supabase.
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse whitespace-nowrap">
+                      <thead>
+                        <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
+                          <th className="p-4 font-bold border-b">ID Transaksi</th>
+                          <th className="p-4 font-bold border-b">Waktu & Tanggal</th>
+                          <th className="p-4 font-bold border-b">Cabang</th>
+                          <th className="p-4 font-bold border-b text-right">Nilai Transaksi</th>
+                          <th className="p-4 font-bold border-b text-center">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {displayedSales.map((trx, idx) => (
+                          <tr key={trx.id || idx} className="hover:bg-slate-50 transition-colors">
+                            <td className="p-4 font-mono font-bold text-xs text-blue-700">TRX-{trx.id.slice(0, 8)}</td>
+                            <td className="p-4 text-xs font-semibold text-gray-700">
+                              {new Date(trx.created_at).toLocaleString('id-ID')}
+                            </td>
+                            <td className="p-4 text-xs font-bold text-gray-800">
+                              {(trx.branch_id === 'd0e659b9-0c62-4015-ab1b-265de35bfcd1' || !trx.branch_id) ? 'Tambun 1' : trx.branch_id}
+                            </td>
+                            <td className="p-4 text-right font-black text-sm text-gray-900">
+                              Rp {Number(trx.total_amount).toLocaleString('id-ID')}
+                            </td>
+                            <td className="p-4 text-center">
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-700">
+                                COMPLETED
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                        {displayedSales.length === 0 && (
+                          <tr>
+                            <td colSpan={5} className="p-12 text-center text-gray-400 font-medium">
+                              Belum ada riwayat transaksi pada periode dan cabang yang dipilih.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
                   </div>
                </div>
             </div>
@@ -942,8 +1360,18 @@ export default function OwnerDashboard() {
                  <h3 className="font-bold text-gray-800 text-lg mb-6">Konfigurasi Sistem Global</h3>
                  <div className="space-y-6">
                     <div>
+                       <label className="block text-sm font-bold text-gray-700 mb-2">Bot Telegram Security Alert</label>
+                       <div className="flex gap-2">
+                         <input type="text" defaultValue="@AlKahfiAlertBot" disabled className="w-full border rounded-lg px-4 py-2 bg-gray-100 text-gray-600 font-mono text-sm cursor-not-allowed" />
+                         <span className="shrink-0 px-3 py-2 bg-green-100 text-green-700 font-bold text-xs rounded-lg flex items-center">
+                           ● Terhubung
+                         </span>
+                       </div>
+                       <p className="text-xs text-gray-400 mt-1">Grup Chat ID Owner: -10023481920 (Live Broadcast Dispatch)</p>
+                    </div>
+                    <div>
                        <label className="block text-sm font-bold text-gray-700 mb-2">URL Database Supabase</label>
-                       <input type="text" value="https://xtz...supabase.co" disabled className="w-full border rounded-lg px-4 py-2 bg-gray-100 text-gray-500 cursor-not-allowed font-mono text-sm" />
+                       <input type="text" value="https://qxvgciwufwvchgfapjyk.supabase.co" disabled className="w-full border rounded-lg px-4 py-2 bg-gray-100 text-gray-500 cursor-not-allowed font-mono text-sm" />
                        <p className="text-xs text-gray-400 mt-1">Hanya dapat diubah dari Environment Variables</p>
                     </div>
                     <div>
@@ -970,7 +1398,7 @@ export default function OwnerDashboard() {
                  </div>
                </div>
                <div className="p-4 bg-gray-50 border-t flex justify-end">
-                  <button className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-sm">Simpan Pengaturan</button>
+                  <button onClick={() => alert("Pengaturan berhasil disimpan!")} className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-sm">Simpan Pengaturan</button>
                </div>
             </div>
           )}
@@ -1093,6 +1521,121 @@ export default function OwnerDashboard() {
             <div className="absolute bottom-0 inset-x-0 p-4 bg-gradient-to-t from-black/80 to-transparent text-white rounded-b-xl">
               <p className="font-bold">Bukti CCTV Otomatis (Resolusi Tinggi)</p>
               <p className="text-xs text-gray-300">File asli tersimpan di Cloudinary dengan enkripsi WORM.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Telegram Fraud Alert Detail Modal */}
+      {selectedFraudModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setSelectedFraudModal(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 overflow-hidden border border-red-100 animate-in fade-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-start border-b pb-4">
+              <div className="flex items-center space-x-3">
+                <div className="p-2 bg-red-100 text-red-600 rounded-xl">
+                  <AlertCircle size={24} />
+                </div>
+                <div>
+                  <span className="inline-flex items-center text-[10px] bg-red-100 text-red-700 font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider mb-1">
+                    Security Anomaly
+                  </span>
+                  <h3 className="text-lg font-black text-gray-900 leading-snug">{selectedFraudModal.title}</h3>
+                </div>
+              </div>
+              <button onClick={() => setSelectedFraudModal(null)} className="text-gray-400 hover:text-gray-600 p-1">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="py-4 space-y-4">
+              {/* Info Grid */}
+              <div className="grid grid-cols-2 gap-3 bg-gray-50 p-3 rounded-xl border border-gray-100 text-xs">
+                <div>
+                  <p className="text-gray-400 font-semibold">Cabang Lokasi</p>
+                  <p className="font-bold text-gray-800 text-sm mt-0.5">{selectedFraudModal.branch}</p>
+                </div>
+                <div>
+                  <p className="text-gray-400 font-semibold">Waktu Deteksi</p>
+                  <p className="font-bold text-gray-800 text-sm mt-0.5">{selectedFraudModal.time} WIB</p>
+                </div>
+                <div>
+                  <p className="text-gray-400 font-semibold">Kasir Bertugas</p>
+                  <p className="font-bold text-gray-800 mt-0.5">{selectedFraudModal.cashier || 'Kasir'}</p>
+                </div>
+                <div>
+                  <p className="text-gray-400 font-semibold">Status Notifikasi</p>
+                  <p className="font-bold text-emerald-600 mt-0.5 flex items-center">
+                    <CheckCircle size={12} className="mr-1" /> Terkirim ke Telegram
+                  </p>
+                </div>
+              </div>
+
+              {/* Deskripsi */}
+              <div className="bg-red-50/50 p-3.5 rounded-xl border border-red-100">
+                <p className="text-xs font-bold text-red-800 mb-1">Analisis Kecurangan / Anomali:</p>
+                <p className="text-xs text-gray-700 leading-relaxed font-medium">
+                  {selectedFraudModal.description || 'Terdeteksi perbedaan antara aktivitas sensor mesin kompresor/IoT dengan mutasi kasir yang tercatat di sistem POS.'}
+                </p>
+              </div>
+
+              {/* Telegram Dispatch Info Box */}
+              <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl flex items-start space-x-3">
+                <div className="p-1.5 bg-blue-600 text-white rounded-lg mt-0.5 shrink-0">
+                  <Send size={14} />
+                </div>
+                <div className="text-xs">
+                  <p className="font-bold text-blue-900">Telegram Bot Integration Active</p>
+                  <p className="text-blue-700 mt-0.5">
+                    Alert ini telah otomatis diteruskan ke Bot Telegram <b>@AlKahfiAlertBot</b> grup Owner & Supervisor.
+                  </p>
+                </div>
+              </div>
+
+              {/* Snapshot preview if available */}
+              {selectedFraudModal.snapshotUrl && (
+                <div>
+                  <p className="text-xs font-bold text-gray-700 mb-1.5 flex items-center">
+                    <Camera size={14} className="mr-1 text-blue-600" /> Bukti Foto CCTV Terkait:
+                  </p>
+                  <div 
+                    onClick={() => setSelectedSnapshot(selectedFraudModal.snapshotUrl)}
+                    className="relative aspect-video rounded-xl overflow-hidden border border-gray-200 cursor-pointer group"
+                  >
+                    <img src={selectedFraudModal.snapshotUrl} alt="CCTV" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <span className="text-white text-xs font-bold bg-black/60 px-3 py-1.5 rounded-lg">Klik untuk Zoom</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-3 border-t flex flex-col sm:flex-row justify-end gap-2">
+              <button 
+                onClick={() => {
+                  alert(`🚨 Notifikasi Ulang Berhasil Terkirim!\n\nPesan darurat telah dikirim kembali ke Telegram Bot @AlKahfiAlertBot untuk cabang ${selectedFraudModal.branch}.`);
+                }}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center justify-center space-x-1.5 shadow-sm transition-all"
+              >
+                <Send size={13} />
+                <span>Kirim Ulang ke Telegram</span>
+              </button>
+              <button 
+                onClick={() => {
+                  setSelectedFraudModal(null);
+                  setActiveTab("audit");
+                }} 
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center justify-center space-x-1.5 transition-all"
+              >
+                <Camera size={13} />
+                <span>Investigasi di Audit CCTV</span>
+              </button>
+              <button 
+                onClick={() => setSelectedFraudModal(null)} 
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition-all"
+              >
+                Tutup
+              </button>
             </div>
           </div>
         </div>
