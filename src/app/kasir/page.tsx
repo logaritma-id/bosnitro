@@ -6,7 +6,7 @@ import { uploadSnapshot } from "@/lib/cloudinary";
 import { printReceipt, connectPrinter, activePrinterDevice } from "@/lib/print";
 import { Camera, Printer, ShoppingCart, Info, ScanLine, User, MapPin, Wifi, Bluetooth, Plus, Minus, Trash2, XCircle, RefreshCcw, Video, ChevronLeft, Wrench, CheckCircle, Lock, Unlock, LogOut } from "lucide-react";
 
-import { getProducts, saveProducts, getOperators, getBranches } from "@/lib/localDb";
+import { getProducts, saveProducts, getOperators, getBranches, getCustomers, saveCustomers } from "@/lib/localDb";
 
 type Product = {
   id: string | number;
@@ -38,6 +38,7 @@ export default function KasirPage() {
   const [pendingTrxId, setPendingTrxId] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<"CASH" | "QRIS">("CASH");
   const [cashReceived, setCashReceived] = useState<number>(0);
+  const [customerPlat, setCustomerPlat] = useState<string>("");
   const [printerConnected, setPrinterConnected] = useState(false);
   const [iotStatus, setIotStatus] = useState<"Online" | "Offline">("Offline");
   const [showIotPrompt, setShowIotPrompt] = useState(false);
@@ -539,6 +540,53 @@ export default function KasirPage() {
       }
       // ---------------------------------------------------------
 
+      // Simpan / Tambah Poin Loyalti CRM Pelanggan jika plat diinput
+      if (customerPlat && customerPlat.trim()) {
+        try {
+          const platClean = customerPlat.trim().toUpperCase();
+          const allCust = getCustomers();
+          const existing = allCust.find((c: any) => c.plat.toUpperCase() === platClean);
+          let updatedCust;
+          const timeLabel = 'Hari Ini, ' + new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+          if (existing) {
+            updatedCust = allCust.map((c: any) => c.plat.toUpperCase() === platClean ? {
+              ...c,
+              kunjung: (c.kunjung || 0) + 1,
+              poin: (c.poin || 0) + 10,
+              last: timeLabel,
+              fav: cart[0]?.name || c.fav
+            } : c);
+          } else {
+            updatedCust = [
+              ...allCust,
+              {
+                id: Date.now(),
+                plat: platClean,
+                phone: '',
+                kunjung: 1,
+                poin: 10,
+                last: timeLabel,
+                fav: cart[0]?.name || 'Layanan Nitrogen',
+                branch: branchName
+              }
+            ];
+          }
+          saveCustomers(updatedCust);
+          // Sync ke database Supabase
+          await supabase.from('customers').upsert({
+            plat: platClean,
+            kunjung: existing ? (existing.kunjung || 0) + 1 : 1,
+            poin: existing ? (existing.poin || 0) + 10 : 10,
+            last: timeLabel,
+            fav: cart[0]?.name || 'Layanan Nitrogen',
+            branch: branchName
+          }, { onConflict: 'plat' });
+        } catch (e) {
+          console.warn("CRM sync error in kasir:", e);
+        }
+      }
+      setCustomerPlat("");
+
       alert(`Transaksi Lunas! ${paymentMethod === 'CASH' ? '\nKembalian: Rp ' + kembalian.toLocaleString('id-ID') : ''}`);
       setCart([]);
       setCashReceived(0);
@@ -1021,6 +1069,21 @@ export default function KasirPage() {
                 <span className="text-2xl font-black text-blue-600">Rp {totalAmount.toLocaleString('id-ID')}</span>
               </div>
               
+              {/* Input Plat Nomor Pelanggan (Loyalti Poin) */}
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="text-xs font-bold text-gray-700">Plat Kendaraan (Loyalti Poin)</label>
+                  <span className="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-black">+10 Poin</span>
+                </div>
+                <input 
+                  type="text" 
+                  value={customerPlat}
+                  onChange={(e) => setCustomerPlat(e.target.value.toUpperCase())}
+                  placeholder="Misal: B 1234 ABC (Opsional)" 
+                  className="w-full px-3.5 py-2.5 border-2 border-gray-200 rounded-xl text-sm font-mono font-bold uppercase focus:border-blue-500 focus:outline-none bg-white text-gray-900 placeholder:normal-case placeholder:font-sans placeholder:font-normal"
+                />
+              </div>
+
               <div className="flex bg-gray-200 p-1 rounded-xl">
                 <button
                   onClick={() => setPaymentMethod("CASH")}

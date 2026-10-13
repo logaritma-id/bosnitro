@@ -61,3 +61,25 @@ export function saveBranches(branches: any[]) {
   channel.postMessage({ type: 'DB_UPDATE', payload: { entity: 'branchStats', data: branches } });
   channel.close();
 }
+
+export const DEFAULT_CUSTOMERS = [
+  { id: 1, plat: "B 1234 ABC", phone: "081234567890", kunjung: 12, last: "Hari Ini, 09:30", fav: "Isi Baru Motor", poin: 120, branch: "Tambun 1" },
+  { id: 2, plat: "B 4321 XYZ", phone: "081987654321", kunjung: 8, last: "Kemarin, 14:15", fav: "Ganti Oli Mesin", poin: 80, branch: "Tambun 1" },
+  { id: 3, plat: "B 9999 KKK", phone: "085712345678", kunjung: 3, last: "05 Okt 2026", fav: "Tambal Ban Motor", poin: 30, branch: "Tambun 2" },
+  { id: 4, plat: "D 5678 EFG", phone: "087812345678", kunjung: 25, last: "01 Okt 2026", fav: "Isi Tambah Mobil", poin: 250, branch: "Tambun 1" },
+];
+
+export function getCustomers() {
+  if (typeof window === "undefined") return DEFAULT_CUSTOMERS;
+  const data = localStorage.getItem("pos_customers");
+  return data ? JSON.parse(data) : DEFAULT_CUSTOMERS;
+}
+
+export function saveCustomers(customers: any[]) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem("pos_customers", JSON.stringify(customers));
+  // Broadcast update
+  const channel = new BroadcastChannel('pos_demo_channel');
+  channel.postMessage({ type: 'DB_UPDATE', payload: { entity: 'customers' } });
+  channel.close();
+}

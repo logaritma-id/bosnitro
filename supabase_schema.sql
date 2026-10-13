@@ -74,3 +74,34 @@ CREATE POLICY "Public access branch_devices"
 ON public.branch_devices FOR ALL 
 USING (true) 
 WITH CHECK (true);
+
+-- 4. Tabel CRM Pelanggan & Loyalti
+CREATE TABLE IF NOT EXISTS public.customers (
+    id BIGSERIAL PRIMARY KEY,
+    plat TEXT UNIQUE NOT NULL,
+    phone TEXT DEFAULT '',
+    kunjung INTEGER NOT NULL DEFAULT 1,
+    last TEXT DEFAULT '',
+    fav TEXT DEFAULT 'Isi Baru Motor',
+    poin INTEGER NOT NULL DEFAULT 10,
+    branch TEXT DEFAULT 'Tambun 1',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Inisialisasi data CRM default
+INSERT INTO public.customers (plat, phone, kunjung, last, fav, poin, branch)
+VALUES
+  ('B 1234 ABC', '081234567890', 12, 'Hari Ini, 09:30', 'Isi Baru Motor', 120, 'Tambun 1'),
+  ('B 4321 XYZ', '081987654321', 8, 'Kemarin, 14:15', 'Ganti Oli Mesin', 80, 'Tambun 1'),
+  ('B 9999 KKK', '085712345678', 3, '05 Okt 2026', 'Tambal Ban Motor', 30, 'Tambun 2'),
+  ('D 5678 EFG', '087812345678', 25, '01 Okt 2026', 'Isi Tambah Mobil', 250, 'Tambun 1')
+ON CONFLICT (plat) DO NOTHING;
+
+ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Public access customers" ON public.customers;
+CREATE POLICY "Public access customers" 
+ON public.customers FOR ALL 
+USING (true) 
+WITH CHECK (true);

@@ -22,9 +22,12 @@ import {
   X,
   Send,
   Trash2,
-  Download
+  Download,
+  Gift,
+  Phone,
+  MessageSquare
 } from "lucide-react";
-import { getProducts, saveProducts, getOperators, saveOperators, getBranches, saveBranches } from "../../lib/localDb";
+import { getProducts, saveProducts, getOperators, saveOperators, getBranches, saveBranches, getCustomers, saveCustomers } from "../../lib/localDb";
 import { supabase } from "@/lib/supabase";
 
 // Helper untuk filter rentang tanggal/hari
@@ -162,6 +165,12 @@ export default function OwnerDashboard() {
   const [showOperatorModal, setShowOperatorModal] = useState(false);
   const [newOperator, setNewOperator] = useState<{id?: number, name: string, pin: string, branch: string}>({ name: '', pin: '', branch: '' });
   const [selectedBranchConfig, setSelectedBranchConfig] = useState<any>(null);
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [crmSearch, setCrmSearch] = useState("");
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [newCustomer, setNewCustomer] = useState<{id?: number, plat: string, phone: string, fav: string, poin: number, kunjung: number, branch: string}>({ plat: '', phone: '', fav: 'Isi Baru Motor', poin: 10, kunjung: 1, branch: 'Tambun 1' });
+  const [showRedeemModal, setShowRedeemModal] = useState<any | null>(null);
+
 
   // Ambil data Transaksi, Absensi, Shift, dan Hardware IoT langsung dari Database Supabase
   const loadDataFromSupabase = async () => {
@@ -475,6 +484,7 @@ export default function OwnerDashboard() {
         if (event.data.payload.entity === 'products') setProducts(getProducts());
         if (event.data.payload.entity === 'operators') setOperators(getOperators());
         if (event.data.payload.entity === 'branchStats') setBranchStats(getBranches());
+        if (event.data.payload.entity === 'customers') setCustomers(getCustomers());
       }
     };
     return () => channel.close();
@@ -582,6 +592,135 @@ export default function OwnerDashboard() {
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
     link.setAttribute("download", `Laporan_Shift_${selectedBranch.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+
+  // Filter pelanggan CRM
+  const displayedCustomers = customers.filter((c: any) => {
+    const branchMatch = selectedBranch === "Semua Cabang" || (c.branch || "Tambun 1").toLowerCase() === selectedBranch.toLowerCase();
+    const searchMatch = !crmSearch || 
+      (c.plat && c.plat.toLowerCase().includes(crmSearch.toLowerCase())) ||
+      (c.phone && c.phone.includes(crmSearch)) ||
+      (c.fav && c.fav.toLowerCase().includes(crmSearch.toLowerCase()));
+    return branchMatch && searchMatch;
+  });
+
+  // Handler simpan pelanggan (Tambah / Edit)
+  const handleSaveCustomer = async () => {
+    if (!newCustomer.plat.trim()) {
+      alert("Plat kendaraan tidak boleh kosong!");
+      return;
+    }
+    const platClean = newCustomer.plat.trim().toUpperCase();
+    try {
+      let updated: any[];
+      if (newCustomer.id) {
+        // Update
+        const { error } = await supabase.from('customers').update({
+          plat: platClean,
+          phone: newCustomer.phone,
+          fav: newCustomer.fav,
+          poin: newCustomer.poin,
+          kunjung: newCustomer.kunjung,
+          branch: newCustomer.branch,
+          updated_at: new Date().toISOString()
+        }).eq('id', newCustomer.id);
+        if (error) console.warn("Supabase update customer warning:", error);
+        updated = customers.map(c => c.id === newCustomer.id ? { ...newCustomer, plat: platClean } : c);
+        alert("✅ Data pelanggan berhasil diperbarui!");
+      } else {
+        // Insert
+        const { data: inserted, error } = await supabase.from('customers').insert({
+          plat: platClean,
+          phone: newCustomer.phone,
+          fav: newCustomer.fav,
+          poin: newCustomer.poin,
+          kunjung: newCustomer.kunjung,
+          branch: newCustomer.branch,
+          last: 'Hari Ini, ' + new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+        }).select().single();
+        if (error) console.warn("Supabase insert customer warning:", error);
+        const itemToAdd = inserted || {
+          ...newCustomer,
+          plat: platClean,
+          id: Date.now(),
+          last: 'Hari Ini, ' + new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+        };
+        updated = [itemToAdd, ...customers];
+        alert("✅ Pelanggan baru berhasil ditambahkan!");
+      }
+      setCustomers(updated);
+      saveCustomers(updated);
+      setShowCustomerModal(false);
+      setNewCustomer({ plat: '', phone: '', fav: 'Isi Baru Motor', poin: 10, kunjung: 1, branch: selectedBranch === 'Semua Cabang' ? 'Tambun 1' : selectedBranch });
+    } catch (err: any) {
+      alert("Gagal menyimpan data pelanggan: " + (err?.message || "Error"));
+    }
+  };
+
+  // Handler hapus pelanggan
+  const handleDeleteCustomer = async (cust: any) => {
+    if (!confirm(`Hapus data pelanggan ${cust.plat}?\nRiwayat kunjungan & poin akan dihapus permanen.`)) return;
+    try {
+      if (cust.id) {
+        await supabase.from('customers').delete().eq('id', cust.id);
+      }
+      const updated = customers.filter(c => c.id !== cust.id && c.plat !== cust.plat);
+      setCustomers(updated);
+      saveCustomers(updated);
+      alert("✅ Data pelanggan berhasil dihapus!");
+    } catch (err: any) {
+      alert("Gagal menghapus pelanggan: " + (err?.message || "Error"));
+    }
+  };
+
+  // Handler klaim reward tukar poin
+  const handleRedeemReward = async (cust: any, cost: number, rewardName: string) => {
+    if (cust.poin < cost) {
+      alert(`Poin tidak cukup! Pelanggan memiliki ${cust.poin} pts, dibutuhkan ${cost} pts.`);
+      return;
+    }
+    if (!confirm(`Klaim reward "${rewardName}" untuk ${cust.plat}?\nPoin akan dipotong sebanyak ${cost} pts.`)) return;
+
+    try {
+      const remainingPoints = cust.poin - cost;
+      if (cust.id) {
+        await supabase.from('customers').update({ poin: remainingPoints }).eq('id', cust.id);
+      }
+      const updated = customers.map(c => (c.id === cust.id || c.plat === cust.plat) ? { ...c, poin: remainingPoints } : c);
+      setCustomers(updated);
+      saveCustomers(updated);
+      setShowRedeemModal(null);
+      alert(`🎉 Reward "${rewardName}" berhasil diklaim untuk ${cust.plat}!\nSisa poin pelanggan: ${remainingPoints} pts.`);
+    } catch (err: any) {
+      alert("Gagal memproses klaim reward: " + (err?.message || "Error"));
+    }
+  };
+
+  // Handler ekspor data CRM ke CSV
+  const handleExportCrmExcel = () => {
+    if (displayedCustomers.length === 0) {
+      alert("Tidak ada data pelanggan untuk diekspor.");
+      return;
+    }
+    const headers = ["Plat Kendaraan", "Nomor WhatsApp", "Total Kunjungan", "Terakhir Kunjung", "Layanan Favorit", "Poin Loyalti", "Cabang"];
+    const rows = displayedCustomers.map((c: any) => [
+      `"${c.plat}"`,
+      `"${c.phone || '-'}"`,
+      `"${c.kunjung || 1}x"`,
+      `"${c.last || '-'}"`,
+      `"${c.fav || '-'}"`,
+      c.poin || 0,
+      `"${c.branch || '-'}"`
+    ]);
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((e: any) => e.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `CRM_Pelanggan_${selectedBranch.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1504,11 +1643,41 @@ export default function OwnerDashboard() {
 
           {activeTab === "crm" && (
             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-               <div className="p-5 border-b bg-gray-50/50 flex flex-col sm:flex-row justify-between items-center gap-3">
-                  <h3 className="font-bold text-gray-800">Database Pelanggan (Loyalti)</h3>
-                  <div className="relative w-full sm:w-auto">
-                     <Search size={16} className="absolute left-3 top-2.5 text-gray-400" />
-                     <input type="text" placeholder="Cari Plat Nomor..." className="pl-9 pr-4 py-2 w-full border rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+               <div className="p-5 border-b bg-gray-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                  <div className="flex items-center space-x-2">
+                    <h3 className="font-bold text-gray-800 text-lg">Database Pelanggan (Loyalti)</h3>
+                    <span className="text-xs bg-blue-100 text-blue-800 font-bold px-2.5 py-0.5 rounded-full">
+                      {displayedCustomers.length} Pelanggan
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                     <div className="relative flex-1 sm:w-64">
+                        <Search size={16} className="absolute left-3 top-3 text-gray-500" />
+                        <input 
+                          type="text" 
+                          value={crmSearch}
+                          onChange={(e) => setCrmSearch(e.target.value)}
+                          placeholder="Cari Plat Nomor / No. HP..." 
+                          className="pl-9 pr-4 py-2 w-full border-2 border-gray-200 rounded-lg text-sm font-medium outline-none focus:border-blue-500 bg-white text-gray-900" 
+                        />
+                     </div>
+                     <button 
+                       onClick={handleExportCrmExcel}
+                       className="px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg text-xs font-bold transition-all flex items-center space-x-1"
+                       title="Download Data Pelanggan CSV"
+                     >
+                       <Download size={13} />
+                       <span className="hidden sm:inline">CSV</span>
+                     </button>
+                     <button 
+                       onClick={() => {
+                         setNewCustomer({ plat: '', phone: '', fav: 'Isi Baru Motor', poin: 10, kunjung: 1, branch: selectedBranch === 'Semua Cabang' ? 'Tambun 1' : selectedBranch });
+                         setShowCustomerModal(true);
+                       }}
+                       className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition-all shadow-sm flex items-center space-x-1"
+                     >
+                       <span>+ Tambah Pelanggan</span>
+                     </button>
                   </div>
                </div>
                <div className="overflow-x-auto">
@@ -1516,29 +1685,96 @@ export default function OwnerDashboard() {
                    <thead>
                      <tr className="bg-gray-100 text-gray-800 text-xs uppercase tracking-wider font-extrabold">
                        <th className="p-4 font-bold border-b">Plat Kendaraan</th>
-                       <th className="p-4 font-bold border-b">Kunjungan</th>
+                       <th className="p-4 font-bold border-b text-center">Kunjungan</th>
                        <th className="p-4 font-bold border-b">Terakhir Kunjung</th>
                        <th className="p-4 font-bold border-b">Layanan Favorit</th>
                        <th className="p-4 font-bold border-b text-right">Total Poin</th>
+                       <th className="p-4 font-bold border-b text-right">Aksi & Program</th>
                      </tr>
                    </thead>
                    <tbody className="divide-y divide-gray-100">
-                     {[
-                       { plat: "B 1234 ABC", kunjung: 12, last: "Hari Ini, 09:30", fav: "Isi Baru Motor", poin: 120 },
-                       { plat: "B 4321 XYZ", kunjung: 8, last: "Kemarin, 14:15", fav: "Ganti Oli Mesin", poin: 80 },
-                       { plat: "B 9999 KKK", kunjung: 3, last: "05 Okt 2026", fav: "Tambal Ban Motor", poin: 30 },
-                       { plat: "D 5678 EFG", kunjung: 25, last: "01 Okt 2026", fav: "Isi Tambah Mobil", poin: 250 },
-                     ].map((user, i) => (
-                       <tr key={i} className="hover:bg-slate-50 transition-colors">
-                         <td className="p-4 font-bold text-gray-900">
-                           <div className="bg-gray-900 text-white px-2 py-1 rounded text-xs inline-block font-mono border-b-2 border-white ring-2 ring-gray-900">{user.plat}</div>
+                     {displayedCustomers.map((user: any, i: number) => {
+                       const cleanPhone = (user.phone || '').replace(/\D/g, '');
+                       const waLink = cleanPhone ? `https://wa.me/${cleanPhone.startsWith('0') ? '62' + cleanPhone.slice(1) : cleanPhone}?text=${encodeURIComponent(`Halo Kak! Terima kasih telah berkunjung ke Outlet Nitrogen Al-Kahfi. Poin loyalti kendaraan ${user.plat} Anda saat ini: ${user.poin || 0} pts. Kunjungi outlet kami dan tukarkan dengan hadiah spesial!`)}` : null;
+                       return (
+                         <tr key={user.id || user.plat || i} className="hover:bg-slate-50 transition-colors">
+                           <td className="p-4 font-bold text-gray-900">
+                             <div className="flex flex-col">
+                               <div className="bg-gray-900 text-white px-2.5 py-1 rounded-md text-xs font-mono font-black border-b-2 border-white ring-2 ring-gray-900 w-fit">
+                                 {user.plat}
+                               </div>
+                               {user.phone && (
+                                 <span className="text-[11px] text-gray-600 font-bold mt-1 flex items-center">
+                                   <Phone size={10} className="mr-1 text-gray-400" /> {user.phone}
+                                 </span>
+                               )}
+                             </div>
+                           </td>
+                           <td className="p-4 font-extrabold text-gray-800 text-center">{user.kunjung || 1}x</td>
+                           <td className="p-4 text-sm text-gray-700 font-bold">{user.last || '-'}</td>
+                           <td className="p-4 text-sm text-gray-700 font-semibold">{user.fav || 'Layanan Nitrogen'}</td>
+                           <td className="p-4 text-right">
+                             <span className="font-black text-blue-600 text-base">{user.poin || 0}</span>
+                             <span className="text-xs font-bold text-gray-500 ml-1">pts</span>
+                           </td>
+                           <td className="p-4 text-right">
+                             <div className="flex justify-end items-center space-x-1.5">
+                               {waLink ? (
+                                 <a 
+                                   href={waLink} 
+                                   target="_blank" 
+                                   rel="noopener noreferrer"
+                                   className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold transition-all flex items-center space-x-1"
+                                   title="Kirim Pesan WhatsApp / Promo"
+                                 >
+                                   <MessageSquare size={13} />
+                                   <span>WA</span>
+                                 </a>
+                               ) : null}
+                               <button 
+                                 onClick={() => setShowRedeemModal(user)}
+                                 className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-bold transition-all flex items-center space-x-1"
+                                 title="Tukar Hadiah Poin Loyalti"
+                               >
+                                 <Gift size={13} />
+                                 <span>Tukar Poin</span>
+                               </button>
+                               <button 
+                                 onClick={() => {
+                                   setNewCustomer({
+                                     id: user.id,
+                                     plat: user.plat,
+                                     phone: user.phone || '',
+                                     fav: user.fav || 'Isi Baru Motor',
+                                     poin: user.poin || 0,
+                                     kunjung: user.kunjung || 1,
+                                     branch: user.branch || (selectedBranch === 'Semua Cabang' ? 'Tambun 1' : selectedBranch)
+                                   });
+                                   setShowCustomerModal(true);
+                                 }}
+                                 className="px-2 py-1.5 text-blue-600 hover:text-blue-800 text-xs font-bold hover:bg-blue-50 rounded-lg transition-all"
+                               >
+                                 Edit
+                               </button>
+                               <button 
+                                 onClick={() => handleDeleteCustomer(user)}
+                                 className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-all"
+                                 title="Hapus Pelanggan"
+                               >
+                                 <Trash2 size={13} />
+                               </button>
+                             </div>
+                           </td>
+                         </tr>
+                       );
+                     })}
+                     {displayedCustomers.length === 0 && (
+                       <tr>
+                         <td colSpan={6} className="p-12 text-center text-gray-600 font-bold">
+                           Belum ada data pelanggan yang cocok dengan pencarian / cabang yang dipilih.
                          </td>
-                         <td className="p-4 font-bold text-gray-700">{user.kunjung}x</td>
-                         <td className="p-4 text-sm text-gray-700 font-bold">{user.last}</td>
-                         <td className="p-4 text-sm text-gray-600 font-semibold">{user.fav}</td>
-                         <td className="p-4 text-right font-black text-blue-600">{user.poin} <span className="text-xs font-normal text-gray-400">pts</span></td>
                        </tr>
-                     ))}
+                     )}
                    </tbody>
                  </table>
                </div>
@@ -1672,6 +1908,147 @@ export default function OwnerDashboard() {
 
         </div>
       </main>
+
+            {/* Modal Tambah / Edit Pelanggan CRM */}
+      {showCustomerModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 border border-gray-200 text-gray-900">
+            <h3 className="font-extrabold text-xl mb-4 text-gray-900">
+              {newCustomer.id ? 'Edit Data Pelanggan' : 'Tambah Pelanggan Baru'}
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-gray-800 mb-1">Plat Nomor Kendaraan</label>
+                <input 
+                  type="text" 
+                  value={newCustomer.plat} 
+                  onChange={e => setNewCustomer({...newCustomer, plat: e.target.value.toUpperCase()})} 
+                  placeholder="Misal: B 1234 ABC" 
+                  className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-mono font-bold text-gray-900 uppercase bg-white" 
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-800 mb-1">Nomor WhatsApp / HP (Opsional)</label>
+                <input 
+                  type="text" 
+                  value={newCustomer.phone} 
+                  onChange={e => setNewCustomer({...newCustomer, phone: e.target.value.replace(/\D/g, '')})} 
+                  placeholder="Misal: 081234567890" 
+                  className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900 bg-white" 
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-800 mb-1">Total Poin Loyalti</label>
+                  <input 
+                    type="number" 
+                    value={newCustomer.poin} 
+                    onChange={e => setNewCustomer({...newCustomer, poin: parseInt(e.target.value) || 0})} 
+                    className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900 bg-white" 
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-800 mb-1">Total Kunjungan</label>
+                  <input 
+                    type="number" 
+                    value={newCustomer.kunjung} 
+                    onChange={e => setNewCustomer({...newCustomer, kunjung: parseInt(e.target.value) || 1})} 
+                    className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900 bg-white" 
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-800 mb-1">Layanan Favorit</label>
+                <input 
+                  type="text" 
+                  value={newCustomer.fav} 
+                  onChange={e => setNewCustomer({...newCustomer, fav: e.target.value})} 
+                  placeholder="Misal: Isi Baru Motor" 
+                  className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900 bg-white" 
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-800 mb-1">Cabang Terdaftar</label>
+                <select 
+                  value={newCustomer.branch} 
+                  onChange={e => setNewCustomer({...newCustomer, branch: e.target.value})} 
+                  className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900 bg-white"
+                >
+                  {branchStats.map(b => <option key={b.name} value={b.name}>{b.name}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end space-x-3">
+              <button 
+                onClick={() => setShowCustomerModal(false)} 
+                className="px-4 py-2 font-bold text-gray-700 hover:bg-gray-100 rounded-lg"
+              >
+                Batal
+              </button>
+              <button 
+                onClick={handleSaveCustomer} 
+                className="px-4 py-2 font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow"
+              >
+                Simpan Pelanggan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Tukar Poin Loyalti Pelanggan */}
+      {showRedeemModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 border border-gray-200 text-gray-900">
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="p-2.5 bg-amber-100 text-amber-700 rounded-xl">
+                <Gift size={24} />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-xl text-gray-900">Tukar Poin Loyalti</h3>
+                <p className="text-xs text-gray-600 font-medium mt-0.5">
+                  Kendaraan: <b className="font-mono text-gray-900">{showRedeemModal.plat}</b> (Poin: <b className="text-blue-600">{showRedeemModal.poin} pts</b>)
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3 mb-6">
+              {[
+                { name: "Gratis 1x Isi Nitrogen Motor", pts: 30, desc: "Potong 30 Poin" },
+                { name: "Diskon Tambal Ban Rp 5.000", pts: 50, desc: "Potong 50 Poin" },
+                { name: "Gratis 1x Isi Nitrogen Mobil", pts: 80, desc: "Potong 80 Poin" },
+                { name: "Diskon Ganti Oli Rp 15.000", pts: 150, desc: "Potong 150 Poin" }
+              ].map((reward, idx) => (
+                <div 
+                  key={idx} 
+                  className={`p-3.5 border-2 rounded-xl flex justify-between items-center transition-all ${showRedeemModal.poin >= reward.pts ? 'border-gray-200 bg-white hover:border-amber-500' : 'border-gray-100 bg-gray-50 opacity-60'}`}
+                >
+                  <div>
+                    <p className="font-bold text-sm text-gray-900">{reward.name}</p>
+                    <p className="text-xs font-semibold text-amber-700 mt-0.5">{reward.desc}</p>
+                  </div>
+                  <button
+                    disabled={showRedeemModal.poin < reward.pts}
+                    onClick={() => handleRedeemReward(showRedeemModal, reward.pts, reward.name)}
+                    className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 disabled:bg-gray-200 text-white font-bold text-xs rounded-lg transition-all shadow-sm"
+                  >
+                    Klaim
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-end">
+              <button 
+                onClick={() => setShowRedeemModal(null)} 
+                className="px-4 py-2 font-bold text-gray-700 hover:bg-gray-100 rounded-lg"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add Product Modal */}
       {showProductModal && (
