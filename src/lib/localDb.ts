@@ -5,18 +5,18 @@ export const DEFAULT_OPERATORS = [
 
 export const DEFAULT_PRODUCTS = [
   // Layanan Nitrogen Motor
-  { id: 1, name: "Isi Baru Motor", harga: 5000, hpp: 500, stok: 999, img: "https://placehold.co/100x100/1e293b/ffffff?text=Isi+Baru", category: "nitrogen" },
-  { id: 2, name: "Tambah Angin Motor", harga: 2000, hpp: 200, stok: 999, img: "https://placehold.co/100x100/1e293b/ffffff?text=Tambah", category: "nitrogen" },
-  { id: 3, name: "Tambal Ban Motor", harga: 15000, hpp: 1000, stok: 4, img: "https://placehold.co/100x100/1e293b/ffffff?text=Tambal", category: "nitrogen" },
+  { id: 1, name: "Isi Baru Motor", harga: 5000, hpp: 500, stok: 999, img: "https://placehold.co/100x100/1e293b/ffffff?text=Isi+Baru", category: "nitrogen", barcode: "NITRO-MTR-01" },
+  { id: 2, name: "Tambah Angin Motor", harga: 2000, hpp: 200, stok: 999, img: "https://placehold.co/100x100/1e293b/ffffff?text=Tambah", category: "nitrogen", barcode: "NITRO-MTR-02" },
+  { id: 3, name: "Tambal Ban Motor", harga: 15000, hpp: 1000, stok: 4, img: "https://placehold.co/100x100/1e293b/ffffff?text=Tambal", category: "nitrogen", barcode: "NITRO-MTR-03" },
   
   // Layanan Nitrogen Mobil
-  { id: 4, name: "Isi Baru Mobil", harga: 10000, hpp: 1000, stok: 999, img: "https://placehold.co/100x100/1e293b/ffffff?text=Isi+Mobil", category: "nitrogen" },
-  { id: 5, name: "Tambah Angin Mobil", harga: 5000, hpp: 500, stok: 999, img: "https://placehold.co/100x100/1e293b/ffffff?text=Tambah+Mobil", category: "nitrogen" },
-  { id: 6, name: "Tambal Ban Mobil", harga: 25000, hpp: 2000, stok: 999, img: "https://placehold.co/100x100/1e293b/ffffff?text=Tambal+Mobil", category: "nitrogen" },
+  { id: 4, name: "Isi Baru Mobil", harga: 10000, hpp: 1000, stok: 999, img: "https://placehold.co/100x100/1e293b/ffffff?text=Isi+Mobil", category: "nitrogen", barcode: "NITRO-MBL-01" },
+  { id: 5, name: "Tambah Angin Mobil", harga: 5000, hpp: 500, stok: 999, img: "https://placehold.co/100x100/1e293b/ffffff?text=Tambah+Mobil", category: "nitrogen", barcode: "NITRO-MBL-02" },
+  { id: 6, name: "Tambal Ban Mobil", harga: 25000, hpp: 2000, stok: 999, img: "https://placehold.co/100x100/1e293b/ffffff?text=Tambal+Mobil", category: "nitrogen", barcode: "NITRO-MBL-03" },
 
   // Ritel & Aksesoris
-  { id: 7, name: "Ganti Oli Mesin", harga: 50000, hpp: 35000, stok: 12, img: "https://placehold.co/100x100/1e293b/ffffff?text=Oli", category: "ritel" },
-  { id: 8, name: "Cairan Tubles", harga: 35000, hpp: 20000, stok: 2, img: "https://placehold.co/100x100/1e293b/ffffff?text=Tubles", category: "ritel" },
+  { id: 7, name: "Ganti Oli Mesin", harga: 50000, hpp: 35000, stok: 12, img: "https://placehold.co/100x100/1e293b/ffffff?text=Oli", category: "ritel", barcode: "8992761123456" },
+  { id: 8, name: "Cairan Tubles", harga: 35000, hpp: 20000, stok: 2, img: "https://placehold.co/100x100/1e293b/ffffff?text=Tubles", category: "ritel", barcode: "8992761654321" },
 ];
 
 export function getOperators() {
@@ -37,7 +37,19 @@ export function saveOperators(operators: any[]) {
 export function getProducts() {
   if (typeof window === "undefined") return DEFAULT_PRODUCTS;
   const data = localStorage.getItem("pos_products");
-  return data ? JSON.parse(data) : DEFAULT_PRODUCTS;
+  if (!data) return DEFAULT_PRODUCTS;
+  try {
+    const parsed = JSON.parse(data);
+    return parsed.map((p: any) => {
+      if (!p.barcode) {
+        const def = DEFAULT_PRODUCTS.find(dp => dp.id === p.id || dp.name === p.name);
+        if (def?.barcode) return { ...p, barcode: def.barcode };
+      }
+      return p;
+    });
+  } catch {
+    return DEFAULT_PRODUCTS;
+  }
 }
 
 export function saveProducts(products: any[]) {

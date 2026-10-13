@@ -14,6 +14,7 @@ type Product = {
   harga: number;
   img?: string;
   category?: string;
+  barcode?: string;
 };
 
 export default function KasirPage() {
@@ -21,6 +22,7 @@ export default function KasirPage() {
   const [cart, setCart] = useState<(Product & { qty: number })[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
+  const [barcodeInput, setBarcodeInput] = useState("");
   
   // Mobile View State
   const [mobileView, setMobileView] = useState<"products" | "cart">("products");
@@ -958,22 +960,94 @@ export default function KasirPage() {
 
             {activeTab === "retail" && (
               <div className="space-y-4">
-                <div className="flex justify-between items-center bg-gray-50 p-3 md:p-4 rounded-xl border">
-                  <span className="font-semibold text-gray-800 text-sm md:text-base">Scan Barcode Produk</span>
-                  <button 
-                    onClick={() => setCameraActive(!cameraActive)}
-                    className="bg-gray-800 text-white px-4 py-2 md:px-5 md:py-2.5 rounded-lg flex items-center space-x-2 hover:bg-gray-700 text-sm md:text-base"
-                  >
-                    <ScanLine size={18} />
-                    <span>{cameraActive ? "Tutup Scanner" : "Buka Scanner"}</span>
-                  </button>
-                </div>
-                
-                {cameraActive && (
-                  <div className="bg-black aspect-video rounded-xl flex items-center justify-center text-white border-2 border-gray-200">
-                    <span className="text-xs md:text-sm">Kamera Scanner Placeholder (Gunakan html5-qrcode)</span>
+                <div className="bg-gray-50 p-3 md:p-4 rounded-xl border space-y-3">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center space-x-2">
+                      <ScanLine size={20} className="text-blue-600" />
+                      <span className="font-bold text-gray-800 text-sm md:text-base">Scan Barcode Produk</span>
+                    </div>
+                    <button 
+                      onClick={() => setCameraActive(!cameraActive)}
+                      className="bg-gray-800 hover:bg-gray-700 text-white px-3.5 py-1.5 md:px-4 md:py-2 rounded-lg flex items-center space-x-1.5 text-xs md:text-sm font-bold transition-all cursor-pointer"
+                    >
+                      <ScanLine size={16} />
+                      <span>{cameraActive ? "Tutup Scanner" : "Buka Scanner"}</span>
+                    </button>
                   </div>
-                )}
+
+                  {cameraActive && (
+                    <div className="bg-slate-900 p-4 rounded-xl text-white space-y-3 animate-in fade-in duration-150">
+                      <div className="flex space-x-2">
+                        <input
+                          type="text"
+                          autoFocus
+                          value={barcodeInput}
+                          onChange={(e) => setBarcodeInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              const trimmed = barcodeInput.trim();
+                              if (!trimmed) return;
+                              const match = products.find(p => 
+                                (p.barcode && p.barcode.toLowerCase() === trimmed.toLowerCase()) || 
+                                String(p.id) === trimmed || 
+                                p.name.toLowerCase() === trimmed.toLowerCase()
+                              );
+                              if (match) {
+                                addToCart(match);
+                                setBarcodeInput("");
+                                alert(`✅ ${match.name} berhasil ditambahkan ke keranjang!`);
+                              } else {
+                                alert(`⚠️ Produk dengan barcode "${trimmed}" tidak ditemukan.`);
+                              }
+                            }
+                          }}
+                          placeholder="Tembak scanner gun atau ketik barcode produk..."
+                          className="flex-1 bg-slate-800 border-2 border-slate-700 focus:border-blue-500 rounded-lg px-3 py-2 text-white font-mono font-bold text-sm outline-none placeholder:text-slate-500 placeholder:font-sans"
+                        />
+                        <button
+                          onClick={() => {
+                            const trimmed = barcodeInput.trim();
+                            if (!trimmed) return;
+                            const match = products.find(p => 
+                              (p.barcode && p.barcode.toLowerCase() === trimmed.toLowerCase()) || 
+                              String(p.id) === trimmed || 
+                              p.name.toLowerCase() === trimmed.toLowerCase()
+                            );
+                            if (match) {
+                              addToCart(match);
+                              setBarcodeInput("");
+                              alert(`✅ ${match.name} berhasil ditambahkan ke keranjang!`);
+                            } else {
+                              alert(`⚠️ Produk dengan barcode "${trimmed}" tidak ditemukan.`);
+                            }
+                          }}
+                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-lg transition-colors cursor-pointer"
+                        >
+                          Scan
+                        </button>
+                      </div>
+
+                      <div>
+                        <span className="text-[11px] font-bold text-slate-400 block mb-1">⚡ Barcode Terdaftar (Klik untuk scan cepat):</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {products.filter(p => p.barcode).map(p => (
+                            <button
+                              key={p.id}
+                              onClick={() => {
+                                addToCart(p);
+                                alert(`✅ ${p.name} berhasil ditambahkan ke keranjang!`);
+                              }}
+                              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-md text-xs font-mono text-blue-300 transition-colors cursor-pointer"
+                            >
+                              {p.barcode} ({p.name})
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
 
                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 mt-4">
                   {products.filter(p => p.category === 'ritel').map((product) => (
@@ -986,7 +1060,12 @@ export default function KasirPage() {
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={product.img || "https://placehold.co/200x200/eff6ff/2563eb?text=No+Image"} alt={product.name} className="object-cover w-full h-full" />
                       </div>
-                      <span className="text-xs md:text-sm font-bold text-gray-800 text-center leading-tight mb-1 md:mb-2">{product.name}</span>
+                      <span className="text-xs md:text-sm font-bold text-gray-800 text-center leading-tight mb-1">{product.name}</span>
+                      {product.barcode && (
+                        <span className="text-[10px] font-mono text-gray-500 bg-gray-100 px-2 py-0.5 rounded mb-1">
+                          {product.barcode}
+                        </span>
+                      )}
                       <span className="text-gray-800 font-black text-sm md:text-base">Rp {product.harga.toLocaleString('id-ID')}</span>
                     </button>
                   ))}

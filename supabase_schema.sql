@@ -33,9 +33,13 @@ CREATE TABLE IF NOT EXISTS public.products (
     stok INTEGER NOT NULL DEFAULT 0,
     img TEXT DEFAULT '',
     category TEXT NOT NULL DEFAULT 'nitrogen',
+    barcode TEXT DEFAULT '',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Migrasi aman jika tabel sudah ada sebelumnya:
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS barcode TEXT DEFAULT '';
 
 -- Inisialisasi data produk default
 INSERT INTO public.products (name, harga, hpp, stok, img, category)

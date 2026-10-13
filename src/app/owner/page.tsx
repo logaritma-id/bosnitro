@@ -28,7 +28,8 @@ import {
   MessageSquare,
   Save,
   RotateCcw,
-  Printer
+  Printer,
+  ScanLine
 } from "lucide-react";
 import { getProducts, saveProducts, getOperators, saveOperators, getBranches, saveBranches, getCustomers, saveCustomers } from "../../lib/localDb";
 import { supabase } from "@/lib/supabase";
@@ -182,7 +183,10 @@ export default function OwnerDashboard() {
   const [products, setProducts] = useState<any[]>([]);
   const [operators, setOperators] = useState<any[]>([]);
   const [showProductModal, setShowProductModal] = useState(false);
-  const [newProduct, setNewProduct] = useState<{id?: number, name: string, harga: number, hpp: number, stok: number, img: string, category: string}>({ name: '', harga: 0, hpp: 0, stok: 0, img: '', category: 'nitrogen' });
+  const [newProduct, setNewProduct] = useState<{id?: number, name: string, harga: number, hpp: number, stok: number, img: string, category: string, barcode?: string}>({ name: '', harga: 0, hpp: 0, stok: 0, img: '', category: 'nitrogen', barcode: '' });
+  const [ownerScannerActive, setOwnerScannerActive] = useState(false);
+  const [scannedBarcode, setScannedBarcode] = useState("");
+  const [scannedProductResult, setScannedProductResult] = useState<any | null>(null);
   const [showOperatorModal, setShowOperatorModal] = useState(false);
   const [newOperator, setNewOperator] = useState<{id?: number, name: string, pin: string, branch: string}>({ name: '', pin: '', branch: '' });
   const [selectedBranchConfig, setSelectedBranchConfig] = useState<any>(null);
@@ -1513,15 +1517,198 @@ export default function OwnerDashboard() {
           {/* TAB 3: STOCK & HARGA */}
           {activeTab === "stock" && (
             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-              <div className="p-5 border-b bg-gray-50/50 flex justify-between items-center">
-                <h3 className="font-bold text-gray-800">Master Data Produk</h3>
-                <button onClick={() => setShowProductModal(true)} className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold shadow-md hover:bg-slate-800 transition-all">+ Tambah Produk</button>
+              <div className="p-5 border-b bg-gray-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <div>
+                  <h3 className="font-extrabold text-xl text-gray-900">Master Data Produk & Stok</h3>
+                  <p className="text-xs text-gray-500 font-medium">Kelola katalog layanan, stok barang ritel, dan barcode</p>
+                </div>
+                <div className="flex items-center space-x-2.5">
+                  <button 
+                    onClick={() => {
+                      setOwnerScannerActive(!ownerScannerActive);
+                      setScannedProductResult(null);
+                      setScannedBarcode("");
+                    }} 
+                    className={`px-3.5 py-2 rounded-lg text-sm font-bold shadow-sm transition-all flex items-center space-x-1.5 cursor-pointer ${
+                      ownerScannerActive ? 'bg-blue-600 text-white shadow-blue-500/20' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    <ScanLine size={16} />
+                    <span>{ownerScannerActive ? "Tutup Scanner" : "Scan Barcode Produk"}</span>
+                  </button>
+                  <button 
+                    onClick={() => {
+                      setNewProduct({ name: '', harga: 0, hpp: 0, stok: 0, img: '', category: 'nitrogen', barcode: '' });
+                      setShowProductModal(true);
+                    }} 
+                    className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold shadow-md hover:bg-slate-800 transition-all cursor-pointer"
+                  >
+                    + Tambah Produk
+                  </button>
+                </div>
               </div>
+
+              {/* Barcode Scanner Box di Menu Owner */}
+              {ownerScannerActive && (
+                <div className="p-5 bg-slate-900 text-white border-b border-slate-800 space-y-4 animate-in fade-in duration-200">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-slate-800 pb-3">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="p-2 bg-blue-600/30 text-blue-400 rounded-xl">
+                        <ScanLine size={20} />
+                      </div>
+                      <div>
+                        <h4 className="font-extrabold text-base text-white">Scanner Barcode Produk (Cari / Cek Produk)</h4>
+                        <p className="text-xs text-slate-400">Scan barcode fisik menggunakan USB Scanner Gun atau ketik kode barcode</p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => setOwnerScannerActive(false)}
+                      className="text-slate-400 hover:text-white text-xs font-bold px-3 py-1 bg-slate-800 rounded-lg cursor-pointer"
+                    >
+                      ✕ Tutup Scanner
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Input Scan Barcode */}
+                    <div className="space-y-3">
+                      <label className="block text-xs font-bold text-slate-300 uppercase tracking-wide">
+                        Input / Scan Barcode (Tekan Enter atau Tembak Scanner)
+                      </label>
+                      <div className="flex space-x-2">
+                        <input 
+                          type="text" 
+                          autoFocus
+                          value={scannedBarcode}
+                          onChange={e => setScannedBarcode(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              const trimmed = scannedBarcode.trim();
+                              if (!trimmed) return;
+                              const found = products.find(p => 
+                                (p.barcode && p.barcode.toLowerCase() === trimmed.toLowerCase()) || 
+                                String(p.id) === trimmed || 
+                                p.name.toLowerCase() === trimmed.toLowerCase()
+                              );
+                              if (found) {
+                                setScannedProductResult(found);
+                              } else {
+                                setScannedProductResult({ notFound: true, code: trimmed });
+                              }
+                            }
+                          }}
+                          placeholder="Arahkan scanner / ketik: 899..."
+                          className="flex-1 bg-slate-800 border-2 border-slate-700 focus:border-blue-500 rounded-xl px-4 py-2.5 text-white font-mono font-bold text-sm outline-none placeholder:text-slate-500 placeholder:font-sans"
+                        />
+                        <button 
+                          onClick={() => {
+                            const trimmed = scannedBarcode.trim();
+                            if (!trimmed) return;
+                            const found = products.find(p => 
+                              (p.barcode && p.barcode.toLowerCase() === trimmed.toLowerCase()) || 
+                              String(p.id) === trimmed || 
+                              p.name.toLowerCase() === trimmed.toLowerCase()
+                            );
+                            if (found) {
+                              setScannedProductResult(found);
+                            } else {
+                              setScannedProductResult({ notFound: true, code: trimmed });
+                            }
+                          }}
+                          className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl transition-all shadow-md cursor-pointer"
+                        >
+                          Cari
+                        </button>
+                      </div>
+
+                      <div>
+                        <p className="text-[11px] font-bold text-slate-400 mb-1.5">⚡ Uji Cepat Barcode Terdaftar (Klik untuk test):</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {products.filter(p => p.barcode).slice(0, 6).map(p => (
+                            <button 
+                              key={p.id}
+                              onClick={() => {
+                                setScannedBarcode(p.barcode);
+                                setScannedProductResult(p);
+                              }}
+                              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs font-mono text-blue-300 transition-colors cursor-pointer"
+                            >
+                              {p.barcode} ({p.name})
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Result Card */}
+                    <div className="bg-slate-800/80 rounded-xl p-4 border border-slate-700/80 flex flex-col justify-center">
+                      {scannedProductResult ? (
+                        scannedProductResult.notFound ? (
+                          <div className="text-center py-2">
+                            <p className="text-sm font-bold text-amber-400">⚠️ Barcode Belum Terdaftar</p>
+                            <p className="text-xs text-slate-300 mt-1 font-mono">Kode: {scannedProductResult.code}</p>
+                            <button 
+                              onClick={() => {
+                                setNewProduct({
+                                  name: '',
+                                  harga: 0,
+                                  hpp: 0,
+                                  stok: 0,
+                                  img: '',
+                                  category: 'ritel',
+                                  barcode: scannedProductResult.code
+                                });
+                                setShowProductModal(true);
+                              }}
+                              className="mt-3 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-all cursor-pointer shadow-sm"
+                            >
+                              + Daftarkan Sebagai Produk Baru
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-3">
+                              <img src={scannedProductResult.img || "https://placehold.co/100x100"} alt="" className="w-12 h-12 rounded-lg object-cover border border-slate-700" />
+                              <div>
+                                <span className="text-xs text-emerald-400 font-bold flex items-center">
+                                  <CheckCircle size={12} className="mr-1" /> Produk Ditemukan
+                                </span>
+                                <h5 className="font-extrabold text-sm text-white">{scannedProductResult.name}</h5>
+                                <p className="text-xs text-slate-300">
+                                  Harga: <b className="text-white">Rp {scannedProductResult.harga.toLocaleString('id-ID')}</b> | Stok: <b className="text-white">{scannedProductResult.stok}</b>
+                                </p>
+                                <p className="text-[11px] font-mono text-blue-300">Barcode: {scannedProductResult.barcode}</p>
+                              </div>
+                            </div>
+                            <button 
+                              onClick={() => {
+                                setNewProduct({ ...scannedProductResult });
+                                setShowProductModal(true);
+                              }}
+                              className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg transition-all shrink-0 ml-2 cursor-pointer shadow-sm"
+                            >
+                              ✏️ Edit Produk
+                            </button>
+                          </div>
+                        )
+                      ) : (
+                        <div className="text-center py-4 text-slate-400 text-xs flex flex-col items-center">
+                          <ScanLine size={28} className="text-slate-600 mb-2" />
+                          <span>Belum ada barcode yang discan. Tembak barcode scanner atau klik tombol uji di sebelah kiri.</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-gray-100 text-gray-800 text-xs uppercase tracking-wider font-extrabold">
                       <th className="p-4 font-bold border-b">Nama Layanan / Barang</th>
+                      <th className="p-4 font-bold border-b">Barcode / SKU</th>
                       <th className="p-4 font-bold border-b">Kategori</th>
                       <th className="p-4 font-bold border-b text-right">Harga Jual</th>
                       <th className="p-4 font-bold border-b text-right">HPP (Modal)</th>
@@ -1537,6 +1724,16 @@ export default function OwnerDashboard() {
                         <td className="p-4 font-bold text-gray-900 flex items-center space-x-3">
                           <img src={prod.img} alt={prod.name} className="w-10 h-10 rounded-md object-cover border" />
                           <span>{prod.name}</span>
+                        </td>
+                        <td className="p-4">
+                          {prod.barcode ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded font-mono font-bold text-xs bg-slate-100 text-slate-800 border border-slate-200">
+                              <ScanLine size={12} className="mr-1 text-slate-500" />
+                              {prod.barcode}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-gray-400 italic">Belum ada</span>
+                          )}
                         </td>
                         <td className="p-4">
                           {prod.category === 'nitrogen' ? (
@@ -2835,7 +3032,7 @@ export default function OwnerDashboard() {
               </h3>
               <button 
                 type="button"
-                onClick={() => { setShowProductModal(false); setNewProduct({ name: '', harga: 0, hpp: 0, stok: 0, img: '', category: 'nitrogen' }); }}
+                onClick={() => { setShowProductModal(false); setNewProduct({ name: '', harga: 0, hpp: 0, stok: 0, img: '', category: 'nitrogen', barcode: '' }); }}
                 className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
                 title="Tutup"
               >
@@ -2848,6 +3045,34 @@ export default function OwnerDashboard() {
               <div>
                 <label className="block text-sm font-bold text-gray-800 mb-1">Nama Produk</label>
                 <input type="text" className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900 bg-white" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} />
+              </div>
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-sm font-bold text-gray-800">Kode Barcode / SKU</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const randomBarcode = '899' + Math.floor(1000000000 + Math.random() * 9000000000);
+                      setNewProduct({ ...newProduct, barcode: randomBarcode });
+                    }}
+                    className="text-xs font-bold text-blue-600 hover:text-blue-800 cursor-pointer"
+                  >
+                    ⚡ Generate Barcode
+                  </button>
+                </div>
+                <div className="relative flex items-center">
+                  <input
+                    type="text"
+                    value={newProduct.barcode || ''}
+                    onChange={e => setNewProduct({...newProduct, barcode: e.target.value})}
+                    placeholder="Contoh: 8992761123456 (bisa diketik / scan via barcode scanner)"
+                    className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 pl-9 outline-none focus:ring-2 focus:border-blue-500 font-mono font-bold text-gray-900 bg-white"
+                  />
+                  <ScanLine size={18} className="absolute left-2.5 text-gray-400 pointer-events-none" />
+                </div>
+                <p className="text-[11px] text-gray-500 mt-1">
+                  Digunakan untuk identifikasi scan produk di menu Kasir maupun Master Data Owner.
+                </p>
               </div>
               <div>
                 <label className="block text-sm font-bold text-gray-800 mb-2">Kategori Produk</label>
@@ -2964,7 +3189,7 @@ export default function OwnerDashboard() {
                       setProducts(updated);
                       saveProducts(updated);
                       setShowProductModal(false);
-                      setNewProduct({ name: '', harga: 0, hpp: 0, stok: 0, img: '', category: 'nitrogen' });
+                      setNewProduct({ name: '', harga: 0, hpp: 0, stok: 0, img: '', category: 'nitrogen', barcode: '' });
                       alert('Produk berhasil dihapus!');
                     } catch (err: any) {
                       alert('Gagal menghapus: ' + (err?.message || 'Error'));
@@ -2978,7 +3203,7 @@ export default function OwnerDashboard() {
               <div className="flex space-x-3 ml-auto">
                 <button 
                   type="button"
-                  onClick={() => { setShowProductModal(false); setNewProduct({ name: '', harga: 0, hpp: 0, stok: 0, img: '', category: 'nitrogen' }); }} 
+                  onClick={() => { setShowProductModal(false); setNewProduct({ name: '', harga: 0, hpp: 0, stok: 0, img: '', category: 'nitrogen', barcode: '' }); }} 
                   className="px-4 py-2 font-bold text-gray-700 hover:bg-gray-200 bg-gray-100 rounded-lg text-sm cursor-pointer"
                 >
                   Batal
@@ -2989,32 +3214,43 @@ export default function OwnerDashboard() {
                     if (!newProduct.name.trim()) { alert('Nama produk tidak boleh kosong!'); return; }
                     try {
                       let updated: any[];
+                      const productPayload: any = {
+                        name: newProduct.name,
+                        harga: newProduct.harga,
+                        hpp: newProduct.hpp,
+                        stok: newProduct.stok,
+                        img: newProduct.img,
+                        category: newProduct.category,
+                        updated_at: new Date().toISOString()
+                      };
+                      if (newProduct.barcode) {
+                        productPayload.barcode = newProduct.barcode;
+                      }
+
                       if (newProduct.id) {
                         // Update di Supabase
-                        const { error } = await supabase.from('products').update({
-                          name: newProduct.name,
-                          harga: newProduct.harga,
-                          hpp: newProduct.hpp,
-                          stok: newProduct.stok,
-                          img: newProduct.img,
-                          category: newProduct.category,
-                          updated_at: new Date().toISOString()
-                        }).eq('id', newProduct.id);
-                        if (error) throw error;
+                        let { error } = await supabase.from('products').update(productPayload).eq('id', newProduct.id);
+                        if (error && error.message?.toLowerCase().includes('barcode')) {
+                          delete productPayload.barcode;
+                          const retry = await supabase.from('products').update(productPayload).eq('id', newProduct.id);
+                          if (retry.error) throw retry.error;
+                        } else if (error) {
+                          throw error;
+                        }
                         updated = products.map(p => p.id === newProduct.id ? { ...newProduct } : p);
                         alert('Produk berhasil diperbarui!');
                       } else {
                         // Insert ke Supabase
-                        const { data: inserted, error } = await supabase.from('products').insert({
-                          name: newProduct.name,
-                          harga: newProduct.harga,
-                          hpp: newProduct.hpp,
-                          stok: newProduct.stok,
-                          img: newProduct.img,
-                          category: newProduct.category
-                        }).select().single();
-                        if (error) throw error;
-                        updated = [...products, inserted];
+                        let { data: inserted, error } = await supabase.from('products').insert(productPayload).select().single();
+                        if (error && error.message?.toLowerCase().includes('barcode')) {
+                          delete productPayload.barcode;
+                          const retry = await supabase.from('products').insert(productPayload).select().single();
+                          if (retry.error) throw retry.error;
+                          inserted = retry.data;
+                        } else if (error) {
+                          throw error;
+                        }
+                        updated = [...products, { ...inserted, barcode: newProduct.barcode }];
                         alert('Produk berhasil ditambahkan!');
                       }
                       setProducts(updated);
@@ -3024,7 +3260,7 @@ export default function OwnerDashboard() {
                       bc.postMessage({ type: 'DB_UPDATE', payload: { entity: 'products' } });
                       bc.close();
                       setShowProductModal(false);
-                      setNewProduct({ name: '', harga: 0, hpp: 0, stok: 0, img: '', category: 'nitrogen' });
+                      setNewProduct({ name: '', harga: 0, hpp: 0, stok: 0, img: '', category: 'nitrogen', barcode: '' });
                     } catch (err: any) {
                       alert('Gagal menyimpan produk: ' + (err?.message || 'Error koneksi Supabase'));
                     }
