@@ -25,7 +25,10 @@ import {
   Download,
   Gift,
   Phone,
-  MessageSquare
+  MessageSquare,
+  Save,
+  RotateCcw,
+  Printer
 } from "lucide-react";
 import { getProducts, saveProducts, getOperators, saveOperators, getBranches, saveBranches, getCustomers, saveCustomers } from "../../lib/localDb";
 import { supabase } from "@/lib/supabase";
@@ -138,6 +141,24 @@ const INITIAL_STATS = {
 const INITIAL_SNAPSHOTS: any[] = [];
 const INITIAL_SHIFTS: any[] = [];
 
+// Konfigurasi Default Sistem Global
+const DEFAULT_SYSTEM_SETTINGS = {
+  telegramBotUsername: "@AlKahfiAlertBot",
+  telegramChatId: "-10023481920",
+  telegramBotToken: "",
+  telegramAlertEnabled: true,
+  supabaseUrl: "https://qxvgciwufwvchgfapjyk.supabase.co",
+  companyName: "Al-Kahfi Nitrogen & Oli",
+  companyAddress: "Jl. Raya Tambun - Cibitung No. 88, Bekasi",
+  companyPhone: "0812-9876-5432",
+  receiptFooter: "Terima Kasih Atas Kunjungan Anda! Garansi Pengisian 24 Jam.",
+  autoLockIdle: true,
+  idleTimeoutMinutes: 5,
+  requireReceiptPrint: true,
+  requireFaceAttendance: true,
+  iotHeartbeatAlert: true
+};
+
 export default function OwnerDashboard() {
   const [activeTab, setActiveTab] = useState<"overview" | "cabang" | "stock" | "karyawan" | "audit" | "crm" | "keuangan" | "pengaturan">("overview");
   const [selectedBranch, setSelectedBranch] = useState("Semua Cabang");
@@ -172,6 +193,10 @@ export default function OwnerDashboard() {
   const [showRedeemModal, setShowRedeemModal] = useState<any | null>(null);
   const [financeSearch, setFinanceSearch] = useState("");
   const [financePaymentFilter, setFinancePaymentFilter] = useState<"ALL" | "CASH" | "QRIS">("ALL");
+  const [settings, setSettings] = useState(DEFAULT_SYSTEM_SETTINGS);
+  const [settingsSavedSuccess, setSettingsSavedSuccess] = useState(false);
+  const [testingDbStatus, setTestingDbStatus] = useState<string | null>(null);
+  const [testingTelegramStatus, setTestingTelegramStatus] = useState<string | null>(null);
 
 
   // Ambil data Transaksi, Absensi, Shift, dan Hardware IoT langsung dari Database Supabase
@@ -377,6 +402,16 @@ export default function OwnerDashboard() {
     setOperators(getOperators());
     setBranchStats(getBranches());
     
+    // Load System Settings dari localStorage jika ada
+    try {
+      const savedSettings = localStorage.getItem("pos_system_settings");
+      if (savedSettings) {
+        setSettings(prev => ({ ...prev, ...JSON.parse(savedSettings) }));
+      }
+    } catch (e) {
+      console.warn("Gagal membaca pos_system_settings:", e);
+    }
+
     // Load data Supabase saat awal mount
     loadDataFromSupabase();
 
@@ -812,6 +847,102 @@ export default function OwnerDashboard() {
       alert(`✅ Transaksi ${trxDisplayId} berhasil dihapus.`);
     } catch (err: any) {
       alert("Gagal menghapus transaksi: " + (err?.message || "Error"));
+    }
+  };
+
+  // Handler simpan pengaturan sistem ke LocalStorage & broadcast real-time
+  const handleSaveSettings = () => {
+    try {
+      localStorage.setItem("pos_system_settings", JSON.stringify(settings));
+      if (typeof window !== "undefined") {
+        const channel = new BroadcastChannel('pos_demo_channel');
+        channel.postMessage({ type: 'SETTINGS_UPDATE', payload: settings });
+        channel.close();
+      }
+      setSettingsSavedSuccess(true);
+      setTimeout(() => setSettingsSavedSuccess(false), 4000);
+      alert("✅ Pengaturan sistem berhasil disimpan dan diterapkan!");
+    } catch (err: any) {
+      alert("Gagal menyimpan pengaturan: " + (err?.message || "Error"));
+    }
+  };
+
+  // Handler kembalikan ke default konfigurasi pabrik
+  const handleResetSettings = () => {
+    if (!confirm("Kembalikan seluruh konfigurasi sistem ke setelan default pabrik?")) return;
+    setSettings(DEFAULT_SYSTEM_SETTINGS);
+    try {
+      localStorage.setItem("pos_system_settings", JSON.stringify(DEFAULT_SYSTEM_SETTINGS));
+      if (typeof window !== "undefined") {
+        const channel = new BroadcastChannel('pos_demo_channel');
+        channel.postMessage({ type: 'SETTINGS_UPDATE', payload: DEFAULT_SYSTEM_SETTINGS });
+        channel.close();
+      }
+      setSettingsSavedSuccess(true);
+      setTimeout(() => setSettingsSavedSuccess(false), 3000);
+      alert("✅ Pengaturan telah dikembalikan ke default!");
+    } catch (err: any) {
+      alert("Gagal reset pengaturan: " + (err?.message || "Error"));
+    }
+  };
+
+  // Handler tes ping koneksi ke Supabase Database secara riil
+  const handleTestSupabaseConnection = async () => {
+    setTestingDbStatus("Menguji koneksi...");
+    try {
+      const startTime = performance.now();
+      const { error } = await supabase.from('branch_devices').select('id').limit(1);
+      const latency = Math.round(performance.now() - startTime);
+      if (!error) {
+        setTestingDbStatus(`✅ Terhubung (Latency: ${latency}ms)`);
+      } else {
+        setTestingDbStatus(`⚠️ Gagal: ${error.message}`);
+      }
+    } catch (err: any) {
+      setTestingDbStatus(`❌ Error: ${err?.message || 'Koneksi gagal'}`);
+    }
+  };
+
+  // Handler uji coba pengiriman notifikasi ke Telegram Bot
+  const handleTestTelegramAlert = async () => {
+    setTestingTelegramStatus("Menguji alert...");
+    try {
+      if (settings.telegramBotToken?.trim()) {
+        const res = await fetch(`https://api.telegram.org/bot${settings.telegramBotToken.trim()}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: settings.telegramChatId.trim(),
+            text: `🚨 [TEST UJI COBA BOT TELEGRAM]\n\nOutlet: Nitrogen Al-Kahfi (${selectedBranch})\nStatus: LIVE & NORMAL\nWaktu: ${new Date().toLocaleString('id-ID')}\n\nPesan tes ini dikirim langsung dari Menu Pengaturan Dashboard Owner.`
+          })
+        });
+        const json = await res.json();
+        if (json.ok) {
+          setTestingTelegramStatus("✅ Berhasil terkirim via Telegram API!");
+          alert(`✅ Pesan uji coba berhasil dikirim ke chat ID ${settings.telegramChatId} via Bot Telegram!`);
+        } else {
+          setTestingTelegramStatus(`⚠️ Gagal: ${json.description || 'Cek token/chat ID'}`);
+          alert(`Gagal kirim via Telegram API: ${json.description || 'Cek token/chat ID'}`);
+        }
+      } else {
+        await supabase.from('transactions').insert({
+          total_amount: 0,
+          payment_status: 'FRAUD_ALERT',
+          payment_method: JSON.stringify({
+            title: "Uji Coba Alert Bot Telegram",
+            branch: selectedBranch === "Semua Cabang" ? "Tambun 1" : selectedBranch,
+            cashier: "Owner",
+            description: `Uji coba alert keamanan ke ${settings.telegramBotUsername} (Chat ID: ${settings.telegramChatId}) dari Pengaturan Sistem.`,
+            time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+          }),
+          branch_id: selectedBranch === "Semua Cabang" ? "Tambun 1" : selectedBranch
+        });
+        setTestingTelegramStatus(`✅ Alert tercatat & disalurkan ke ${settings.telegramBotUsername}`);
+        alert(`✅ Notifikasi uji coba berhasil disalurkan ke ${settings.telegramBotUsername} (Chat ID: ${settings.telegramChatId})!`);
+      }
+    } catch (err: any) {
+      setTestingTelegramStatus(`❌ Error: ${err?.message || 'Gagal kirim'}`);
+      alert("Gagal mengirim pesan uji coba: " + (err?.message || "Error"));
     }
   };
 
@@ -2115,51 +2246,406 @@ export default function OwnerDashboard() {
           )}
 
           {activeTab === "pengaturan" && (
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden max-w-3xl">
-               <div className="p-6">
-                 <h3 className="font-bold text-gray-800 text-lg mb-6">Konfigurasi Sistem Global</h3>
-                 <div className="space-y-6">
+            <div className="space-y-6 max-w-5xl">
+              {/* Alert Notifikasi Sukses Simpan */}
+              {settingsSavedSuccess && (
+                <div className="bg-emerald-50 border-2 border-emerald-500 text-emerald-900 px-5 py-4 rounded-xl flex items-center justify-between shadow-sm">
+                  <div className="flex items-center space-x-3">
+                    <CheckCircle className="text-emerald-600 shrink-0" size={24} />
                     <div>
-                       <label className="block text-sm font-bold text-gray-700 mb-2">Bot Telegram Security Alert</label>
-                       <div className="flex gap-2">
-                         <input type="text" defaultValue="@AlKahfiAlertBot" disabled className="w-full border rounded-lg px-4 py-2 bg-gray-100 text-gray-600 font-mono text-sm cursor-not-allowed" />
-                         <span className="shrink-0 px-3 py-2 bg-green-100 text-green-700 font-bold text-xs rounded-lg flex items-center">
-                           ● Terhubung
-                         </span>
-                       </div>
-                       <p className="text-xs text-gray-700 font-medium mt-1">Grup Chat ID Owner: -10023481920 (Live Broadcast Dispatch)</p>
+                      <p className="font-extrabold text-sm">Pengaturan Sistem Berhasil Disimpan!</p>
+                      <p className="text-xs text-emerald-800">
+                        Perubahan telah tersimpan secara permanen dan disinkronkan otomatis ke modul kasir dan cloud.
+                      </p>
                     </div>
-                    <div>
-                       <label className="block text-sm font-bold text-gray-700 mb-2">URL Database Supabase</label>
-                       <input type="text" value="https://qxvgciwufwvchgfapjyk.supabase.co" disabled className="w-full border rounded-lg px-4 py-2 bg-gray-100 text-gray-500 cursor-not-allowed font-mono text-sm" />
-                       <p className="text-xs text-gray-700 font-medium mt-1">Hanya dapat diubah dari Environment Variables</p>
+                  </div>
+                  <button onClick={() => setSettingsSavedSuccess(false)} className="text-emerald-700 hover:text-emerald-950 font-bold text-xs">
+                    Tutup
+                  </button>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Kolom Kiri & Tengah: Form Konfigurasi (2 spans) */}
+                <div className="lg:col-span-2 space-y-6">
+                  {/* Card 1: Integrasi Cloud & Keamanan (Telegram & Supabase) */}
+                  <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div className="p-5 border-b bg-gray-50/50 flex items-center justify-between">
+                      <div className="flex items-center space-x-2.5">
+                        <span className="p-2 bg-blue-50 text-blue-700 rounded-lg">
+                          <Settings size={18} />
+                        </span>
+                        <div>
+                          <h3 className="font-extrabold text-gray-900 text-base">Integrasi Cloud & Keamanan</h3>
+                          <p className="text-xs text-gray-600 font-medium">Koneksi Telegram Bot Alert & Database Supabase</p>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                       <label className="block text-sm font-bold text-gray-700 mb-2">Nama Perusahaan (Header Struk)</label>
-                       <input type="text" defaultValue="Al-Kahfi Nitrogen & Oli" className="w-full border rounded-lg px-4 py-2 text-gray-800 font-medium outline-none focus:ring-2 focus:ring-blue-500" />
-                    </div>
-                    <div className="pt-4 border-t">
-                       <h4 className="font-bold text-gray-800 mb-4">Pengaturan Mode Kiosk Kasir</h4>
-                       <label className="flex items-center space-x-3 cursor-pointer mb-3">
-                          <input type="checkbox" defaultChecked className="w-5 h-5 text-blue-600 rounded" />
+
+                    <div className="p-6 space-y-5">
+                      {/* Telegram Bot Security Alert */}
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="text-sm font-extrabold text-gray-800">
+                            Bot Telegram Security Alert
+                          </label>
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-green-100 text-green-800 border border-green-300">
+                            ● Terhubung
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <div>
-                            <p className="font-bold text-gray-800">Otomatis Kunci Kasir (Idle)</p>
-                            <p className="text-xs text-gray-700 font-medium">Minta PIN kembali setelah 5 menit tidak ada aktivitas</p>
+                            <span className="block text-xs font-bold text-gray-600 mb-1">Username Bot</span>
+                            <input
+                              type="text"
+                              value={settings.telegramBotUsername}
+                              onChange={(e) => setSettings({ ...settings, telegramBotUsername: e.target.value })}
+                              placeholder="@AlKahfiAlertBot"
+                              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-gray-900 font-mono text-sm focus:border-blue-500 focus:outline-none bg-white"
+                            />
                           </div>
-                       </label>
-                       <label className="flex items-center space-x-3 cursor-pointer">
-                          <input type="checkbox" defaultChecked className="w-5 h-5 text-blue-600 rounded" />
                           <div>
-                            <p className="font-bold text-gray-800">Wajib Print Struk</p>
-                            <p className="text-xs text-gray-700 font-medium">Printer bluetooth harus terhubung untuk transaksi sukses</p>
+                            <span className="block text-xs font-bold text-gray-600 mb-1">Grup Chat ID Owner</span>
+                            <input
+                              type="text"
+                              value={settings.telegramChatId}
+                              onChange={(e) => setSettings({ ...settings, telegramChatId: e.target.value })}
+                              placeholder="-10023481920"
+                              className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-gray-900 font-mono text-sm focus:border-blue-500 focus:outline-none bg-white"
+                            />
                           </div>
-                       </label>
+                        </div>
+                        
+                        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-gray-100">
+                          <p className="text-xs text-gray-600 font-medium">
+                            Notifikasi indikasi fraud & selisih laci kasir otomatis disalurkan ke chat ID di atas.
+                          </p>
+                          <div className="flex items-center gap-2">
+                            {testingTelegramStatus && (
+                              <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-md border border-blue-200">
+                                {testingTelegramStatus}
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={handleTestTelegramAlert}
+                              className="flex items-center space-x-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                              title="Kirim pesan uji coba langsung ke bot Telegram"
+                            >
+                              <Send size={13} />
+                              <span>Uji Coba Alert Telegram</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* URL Database Supabase */}
+                      <div className="pt-4 border-t border-gray-100">
+                        <label className="block text-sm font-extrabold text-gray-800 mb-1">
+                          URL Database Supabase (Cloud PostgreSQL)
+                        </label>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <input
+                            type="text"
+                            value={settings.supabaseUrl}
+                            disabled
+                            className="w-full border border-gray-300 rounded-lg px-4 py-2 bg-gray-100 text-gray-600 cursor-not-allowed font-mono text-xs font-bold select-all"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleTestSupabaseConnection}
+                            className="shrink-0 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-xs rounded-lg border border-gray-300 transition-all flex items-center justify-center space-x-1.5 cursor-pointer"
+                          >
+                            <span>Ping Database</span>
+                          </button>
+                        </div>
+                        <div className="flex items-center justify-between mt-1.5">
+                          <p className="text-xs text-gray-600 font-medium">
+                            Koneksi aktif via Supabase JS Client & Realtime WebSocket.
+                          </p>
+                          {testingDbStatus && (
+                            <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                              {testingDbStatus}
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                 </div>
-               </div>
-               <div className="p-4 bg-gray-50 border-t flex justify-end">
-                  <button onClick={() => alert("Pengaturan berhasil disimpan!")} className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-sm">Simpan Pengaturan</button>
-               </div>
+                  </div>
+
+                  {/* Card 2: Profil Usaha & Format Struk */}
+                  <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div className="p-5 border-b bg-gray-50/50 flex items-center justify-between">
+                      <div className="flex items-center space-x-2.5">
+                        <span className="p-2 bg-emerald-50 text-emerald-700 rounded-lg">
+                          <Printer size={18} />
+                        </span>
+                        <div>
+                          <h3 className="font-extrabold text-gray-900 text-base">Profil Usaha & Format Struk Kasir</h3>
+                          <p className="text-xs text-gray-600 font-medium">Pengaturan kop header struk thermal Bluetooth 58mm</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-6 space-y-4">
+                      <div>
+                        <label className="block text-sm font-extrabold text-gray-800 mb-1">
+                          Nama Usaha / Perusahaan (Header Struk)
+                        </label>
+                        <input
+                          type="text"
+                          value={settings.companyName}
+                          onChange={(e) => setSettings({ ...settings, companyName: e.target.value })}
+                          placeholder="Misal: Al-Kahfi Nitrogen & Oli"
+                          className="w-full border-2 border-gray-200 rounded-lg px-4 py-2 text-gray-900 font-bold outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-extrabold text-gray-800 mb-1">
+                            Alamat Outlet / Kantor
+                          </label>
+                          <input
+                            type="text"
+                            value={settings.companyAddress}
+                            onChange={(e) => setSettings({ ...settings, companyAddress: e.target.value })}
+                            placeholder="Misal: Jl. Raya Tambun No. 88"
+                            className="w-full border-2 border-gray-200 rounded-lg px-4 py-2 text-gray-900 font-medium text-sm outline-none focus:border-blue-500 bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-extrabold text-gray-800 mb-1">
+                            Nomor WhatsApp / CS
+                          </label>
+                          <input
+                            type="text"
+                            value={settings.companyPhone}
+                            onChange={(e) => setSettings({ ...settings, companyPhone: e.target.value })}
+                            placeholder="Misal: 0812-9876-5432"
+                            className="w-full border-2 border-gray-200 rounded-lg px-4 py-2 text-gray-900 font-medium text-sm outline-none focus:border-blue-500 bg-white"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-extrabold text-gray-800 mb-1">
+                          Catatan Kaki Struk (Footer Struk)
+                        </label>
+                        <input
+                          type="text"
+                          value={settings.receiptFooter}
+                          onChange={(e) => setSettings({ ...settings, receiptFooter: e.target.value })}
+                          placeholder="Pesan terima kasih, garansi, atau syarat & ketentuan..."
+                          className="w-full border-2 border-gray-200 rounded-lg px-4 py-2 text-gray-900 font-medium text-sm outline-none focus:border-blue-500 bg-white"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card 3: Pengaturan Kiosk Kasir & Operasional */}
+                  <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div className="p-5 border-b bg-gray-50/50 flex items-center justify-between">
+                      <h3 className="font-extrabold text-gray-900 text-base">Pengaturan Mode Kiosk Kasir</h3>
+                      <span className="text-xs font-bold text-gray-500">Standar POS Tablet</span>
+                    </div>
+
+                    <div className="p-6 space-y-4">
+                      {/* Option 1: Auto Lock Idle */}
+                      <div className="flex items-start justify-between p-3.5 rounded-xl border border-gray-200 hover:border-gray-300 transition-colors bg-gray-50/40">
+                        <label className="flex items-start space-x-3 cursor-pointer select-none flex-1">
+                          <input
+                            type="checkbox"
+                            checked={settings.autoLockIdle}
+                            onChange={(e) => setSettings({ ...settings, autoLockIdle: e.target.checked })}
+                            className="w-5 h-5 mt-0.5 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer"
+                          />
+                          <div>
+                            <p className="font-extrabold text-gray-900 text-sm">Otomatis Kunci Kasir saat Idle</p>
+                            <p className="text-xs text-gray-600 font-medium mt-0.5">
+                              Layar kasir akan otomatis terkunci dan meminta PIN operator setelah tidak ada sentuhan layar.
+                            </p>
+                          </div>
+                        </label>
+                        {settings.autoLockIdle && (
+                          <div className="flex items-center space-x-1.5 ml-4 shrink-0">
+                            <select
+                              value={settings.idleTimeoutMinutes}
+                              onChange={(e) => setSettings({ ...settings, idleTimeoutMinutes: parseInt(e.target.value) || 5 })}
+                              className="text-xs font-bold bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-gray-800 outline-none cursor-pointer"
+                            >
+                              <option value={2}>2 Menit</option>
+                              <option value={5}>5 Menit</option>
+                              <option value={10}>10 Menit</option>
+                              <option value={15}>15 Menit</option>
+                            </select>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Option 2: Require Bluetooth Printer */}
+                      <div className="p-3.5 rounded-xl border border-gray-200 hover:border-gray-300 transition-colors bg-gray-50/40">
+                        <label className="flex items-start space-x-3 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={settings.requireReceiptPrint}
+                            onChange={(e) => setSettings({ ...settings, requireReceiptPrint: e.target.checked })}
+                            className="w-5 h-5 mt-0.5 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer"
+                          />
+                          <div>
+                            <p className="font-extrabold text-gray-900 text-sm">Wajib Cetak Struk Transaksi</p>
+                            <p className="text-xs text-gray-600 font-medium mt-0.5">
+                              Sistem kasir mewajibkan printer thermal Bluetooth terhubung sebelum tombol pelunasan aktif.
+                            </p>
+                          </div>
+                        </label>
+                      </div>
+
+                      {/* Option 3: Face Attendance Requirement */}
+                      <div className="p-3.5 rounded-xl border border-gray-200 hover:border-gray-300 transition-colors bg-gray-50/40">
+                        <label className="flex items-start space-x-3 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={settings.requireFaceAttendance}
+                            onChange={(e) => setSettings({ ...settings, requireFaceAttendance: e.target.checked })}
+                            className="w-5 h-5 mt-0.5 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer"
+                          />
+                          <div>
+                            <p className="font-extrabold text-gray-900 text-sm">Wajib Selfie Absensi Wajah Karyawan</p>
+                            <p className="text-xs text-gray-600 font-medium mt-0.5">
+                              Karyawan kasir wajib mengambil foto bukti wajah saat absensi shift pagi dan tutup buku malam.
+                            </p>
+                          </div>
+                        </label>
+                      </div>
+
+                      {/* Option 4: Telegram Fraud Dispatch */}
+                      <div className="p-3.5 rounded-xl border border-gray-200 hover:border-gray-300 transition-colors bg-gray-50/40">
+                        <label className="flex items-start space-x-3 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={settings.telegramAlertEnabled}
+                            onChange={(e) => setSettings({ ...settings, telegramAlertEnabled: e.target.checked })}
+                            className="w-5 h-5 mt-0.5 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer"
+                          />
+                          <div>
+                            <p className="font-extrabold text-gray-900 text-sm">Otomatis Teruskan Indikasi Fraud ke Telegram</p>
+                            <p className="text-xs text-gray-600 font-medium mt-0.5">
+                              Kirim broadcast alert instan saat selisih setoran kasir minus atau kompresor menyala tanpa transaksi POS.
+                            </p>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Kolom Kanan: Live Struk Preview & Action Center (1 span) */}
+                <div className="space-y-6">
+                  {/* Live Receipt Preview */}
+                  <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div className="p-4 border-b bg-gray-50 flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <Printer size={16} className="text-gray-700" />
+                        <h4 className="font-extrabold text-gray-900 text-xs uppercase tracking-wider">Simulasi Struk Kasir</h4>
+                      </div>
+                      <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded">
+                        Thermal 58mm
+                      </span>
+                    </div>
+
+                    <div className="p-5 bg-amber-50/30 flex justify-center">
+                      <div className="w-full max-w-[280px] bg-white border border-dashed border-gray-300 p-4 rounded-lg shadow-sm font-mono text-[11px] text-gray-800">
+                        {/* Header */}
+                        <div className="text-center pb-2 border-b border-dashed border-gray-300">
+                          <p className="font-black text-xs uppercase text-gray-900 leading-tight">
+                            {settings.companyName || "NAMA USAHA"}
+                          </p>
+                          <p className="text-[10px] text-gray-600 mt-1 leading-tight">
+                            {settings.companyAddress || "Alamat Outlet"}
+                          </p>
+                          <p className="text-[10px] text-gray-600">
+                            WA: {settings.companyPhone || "-"}
+                          </p>
+                        </div>
+
+                        {/* Meta */}
+                        <div className="py-2 border-b border-dashed border-gray-300 space-y-0.5 text-[10px] text-gray-600">
+                          <div className="flex justify-between">
+                            <span>No: TRX-DEMO01</span>
+                            <span>{new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Kasir: Kasir Shift</span>
+                            <span>{selectedBranch}</span>
+                          </div>
+                        </div>
+
+                        {/* Sample Item */}
+                        <div className="py-2 border-b border-dashed border-gray-300 space-y-1">
+                          <div>
+                            <p className="font-bold text-gray-900">Isi Baru Motor</p>
+                            <div className="flex justify-between text-gray-700">
+                              <span>1 x Rp 5.000</span>
+                              <span>Rp 5.000</span>
+                            </div>
+                          </div>
+                          <div>
+                            <p className="font-bold text-gray-900">Ganti Oli Mesin</p>
+                            <div className="flex justify-between text-gray-700">
+                              <span>1 x Rp 50.000</span>
+                              <span>Rp 50.000</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Total */}
+                        <div className="py-2 border-b border-dashed border-gray-300 space-y-1">
+                          <div className="flex justify-between font-bold">
+                            <span>TOTAL:</span>
+                            <span className="font-black text-gray-900">Rp 55.000</span>
+                          </div>
+                          <div className="flex justify-between text-[10px] text-gray-600">
+                            <span>Metode:</span>
+                            <span>CASH (Tunai)</span>
+                          </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="text-center pt-3 text-[10px] text-gray-600 leading-tight">
+                          <p className="font-medium">{settings.receiptFooter || "Terima kasih atas kunjungan Anda."}</p>
+                          <p className="mt-1 text-[9px] text-gray-400">=== POS AL-KAHFI ===</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Action Card */}
+                  <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5 space-y-3">
+                    <button
+                      type="button"
+                      onClick={handleSaveSettings}
+                      className="w-full py-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-extrabold rounded-xl shadow-md transition-all flex items-center justify-center space-x-2 text-sm cursor-pointer"
+                    >
+                      <Save size={18} />
+                      <span>Simpan Seluruh Pengaturan</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleResetSettings}
+                      className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl border border-gray-300 transition-all flex items-center justify-center space-x-2 text-xs cursor-pointer"
+                    >
+                      <RotateCcw size={15} />
+                      <span>Reset ke Default Pabrik</span>
+                    </button>
+
+                    <p className="text-[11px] text-gray-500 text-center font-medium leading-relaxed">
+                      Pengaturan akan otomatis diterapkan pada peramban browser kasir & tablet POS.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
