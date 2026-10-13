@@ -229,7 +229,8 @@ export default function OwnerDashboard() {
       })
       .subscribe();
 
-    return () => {
+
+  return () => {
       clearInterval(pollInterval);
       supabase.removeChannel(subTransactions);
       supabase.removeChannel(subDevices);
@@ -280,6 +281,31 @@ export default function OwnerDashboard() {
     };
     return () => channel.close();
   }, []);
+
+  // --- FILTER DATA BERDASARKAN CABANG YANG DIPILIH ---
+  const displayedBranches = selectedBranch === "Semua Cabang"
+    ? branchStats
+    : branchStats.filter((b: any) => b.name.toLowerCase() === selectedBranch.toLowerCase());
+
+  const displayedSnapshots = selectedBranch === "Semua Cabang"
+    ? snapshots
+    : snapshots.filter((s: any) => (s.branch || "").toLowerCase() === selectedBranch.toLowerCase());
+
+  const displayedAttendances = selectedBranch === "Semua Cabang"
+    ? attendances
+    : attendances.filter((a: any) => (a.branch || "").toLowerCase() === selectedBranch.toLowerCase());
+
+  const displayedShifts = selectedBranch === "Semua Cabang"
+    ? shifts
+    : shifts.filter((s: any) => (s.branch || "").toLowerCase() === selectedBranch.toLowerCase());
+
+  const displayedFraudLogs = selectedBranch === "Semua Cabang"
+    ? fraudLogs
+    : fraudLogs.filter((f: any) => (f.branch || "").toLowerCase().includes(selectedBranch.toLowerCase()));
+
+  const displayedOperators = selectedBranch === "Semua Cabang"
+    ? operators
+    : operators.filter((o: any) => (o.branch || "").toLowerCase() === selectedBranch.toLowerCase());
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row font-sans">
@@ -359,7 +385,7 @@ export default function OwnerDashboard() {
               {activeTab === 'keuangan' && 'Laporan Keuangan'}
               {activeTab === 'pengaturan' && 'Pengaturan Sistem'}
             </h2>
-            <p className="text-gray-500 text-sm">{activeTab === 'overview' ? 'Ringkasan operasional 4 cabang secara real-time.' : 'Real-time data synchronization via Supabase.'}</p>
+            <p className="text-gray-500 text-sm">{activeTab === 'overview' ? (selectedBranch === 'Semua Cabang' ? 'Ringkasan operasional 4 cabang secara real-time.' : `Memantau operasional khusus cabang ${selectedBranch} secara real-time.`) : 'Real-time data synchronization via Supabase.'}</p>
           </div>
           <div className="flex items-center space-x-3 w-full md:w-auto">
             <div className="flex items-center bg-gray-100 rounded-lg px-3 py-2 border">
@@ -399,7 +425,7 @@ export default function OwnerDashboard() {
             <div className="space-y-6">
               {/* Branch Cards Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-                {branchStats.map((branch, i) => (
+                {displayedBranches.map((branch, i) => (
                   <div key={i} className="bg-white rounded-xl shadow-sm border border-emerald-50 flex flex-col overflow-hidden">
                     <div className="p-3 bg-emerald-50/30 flex flex-col border-b border-emerald-50 gap-1">
                       <div className="flex items-center justify-between gap-2">
@@ -442,7 +468,7 @@ export default function OwnerDashboard() {
                      <button onClick={() => setActiveTab("audit")} className="text-blue-600 text-xs font-bold hover:underline">Lihat Semua</button>
                   </div>
                   <div className="flex-1 overflow-x-auto overflow-y-hidden flex space-x-3 pb-2">
-                     {snapshots.slice(0, 5).map((snap, idx) => (
+                     {displayedSnapshots.slice(0, 5).map((snap, idx) => (
                         <div key={idx} onClick={() => setSelectedSnapshot(snap.img || snap.url)} className="w-32 shrink-0 flex flex-col cursor-pointer group">
                            <div className="w-full h-24 bg-gray-100 rounded-lg overflow-hidden mb-2 relative">
                               <img src={snap.img || snap.url} alt="Snap" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
@@ -452,7 +478,7 @@ export default function OwnerDashboard() {
                            <p className="text-[10px] text-gray-500 mt-1">{snap.time}</p>
                         </div>
                      ))}
-                     {snapshots.length === 0 && (
+                     {displayedSnapshots.length === 0 && (
                         <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm font-medium">Belum ada tangkapan layar.</div>
                      )}
                   </div>
@@ -465,7 +491,7 @@ export default function OwnerDashboard() {
                      <button onClick={() => setActiveTab("audit")} className="text-blue-600 text-xs font-bold hover:underline">Lihat Semua</button>
                   </div>
                   <div className="flex-1 overflow-y-auto pr-2 space-y-3">
-                     {(fraudLogs.length > 0 ? fraudLogs : [
+                     {(displayedFraudLogs.length > 0 ? displayedFraudLogs : [
                         { title: "Potensi Fraud - Kompresor Aktif", branch: "Cabang Cibitung 1", time: "10:42" },
                         { title: "Pengisian Tanpa Transaksi POS", branch: "Cabang Tambun 1", time: "09:37" },
                         { title: "Selisih Setoran Karyawan", branch: "Cabang Cibitung 3", time: "08:21" },
@@ -521,7 +547,7 @@ export default function OwnerDashboard() {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
-                {snapshots.map((snap, i) => (
+                {displayedSnapshots.map((snap, i) => (
                   <div key={i} onClick={() => setSelectedSnapshot(snap.img || snap.url)} className="bg-white rounded-2xl overflow-hidden border border-gray-200 shadow-sm hover:shadow-lg transition-all group cursor-pointer">
                     <div className="relative aspect-video bg-gray-900 overflow-hidden">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -545,7 +571,7 @@ export default function OwnerDashboard() {
                     </div>
                   </div>
                 ))}
-                {snapshots.length === 0 && (
+                {displayedSnapshots.length === 0 && (
                   <div className="col-span-full py-16 text-center text-gray-400 font-medium">
                     Belum ada bukti rekaman CCTV dari transaksi kasir.
                   </div>
@@ -630,17 +656,17 @@ export default function OwnerDashboard() {
                     <h3 className="font-bold text-gray-800">Log Absensi Wajah Kasir (Face Attendance)</h3>
                   </div>
                   <span className="text-xs bg-blue-100 text-blue-800 font-bold px-2.5 py-1 rounded-full">
-                    {attendances.length} Catatan Absen
+                    {displayedAttendances.length} Catatan Absen
                   </span>
                 </div>
                 <div className="p-4">
-                  {attendances.length === 0 ? (
+                  {displayedAttendances.length === 0 ? (
                     <div className="text-center py-8 text-gray-400 font-medium text-sm">
                       Belum ada rekaman foto absensi masuk kasir hari ini.
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                      {attendances.map((att, i) => (
+                      {displayedAttendances.map((att, i) => (
                         <div 
                           key={att.id || i} 
                           onClick={() => setSelectedSnapshot(att.img || att.url)}
@@ -698,7 +724,7 @@ export default function OwnerDashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {operators.map((op) => (
+                    {displayedOperators.map((op) => (
                       <tr key={op.id} className="hover:bg-slate-50 transition-colors">
                         <td className="p-4 font-bold text-gray-900 flex items-center space-x-3">
                           <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold">{op.name[0]}</div>
@@ -747,7 +773,7 @@ export default function OwnerDashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {shifts.length === 0 ? (
+                    {displayedShifts.length === 0 ? (
                       <tr>
                         <td colSpan={7} className="p-8 text-center text-gray-400 font-medium">
                           Belum ada laporan shift yang ditutup hari ini.
@@ -810,7 +836,7 @@ export default function OwnerDashboard() {
                      </tr>
                    </thead>
                    <tbody className="divide-y divide-gray-100">
-                     {branchStats.map((branch, i) => (
+                     {displayedBranches.map((branch, i) => (
                        <tr key={i} className="hover:bg-slate-50 transition-colors">
                          <td className="p-4 font-bold text-gray-900 flex items-center space-x-3">
                            <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center"><Building2 size={16} /></div>
