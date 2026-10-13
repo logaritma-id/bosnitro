@@ -2664,12 +2664,22 @@ export default function OwnerDashboard() {
 
             {/* Modal Tambah / Edit Pelanggan CRM */}
       {showCustomerModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 border border-gray-200 text-gray-900">
-            <h3 className="font-extrabold text-xl mb-4 text-gray-900">
-              {newCustomer.id ? 'Edit Data Pelanggan' : 'Tambah Pelanggan Baru'}
-            </h3>
-            <div className="space-y-4">
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col border border-gray-200 text-gray-900 overflow-hidden my-auto">
+            <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between shrink-0 bg-white">
+              <h3 className="font-extrabold text-xl text-gray-900">
+                {newCustomer.id ? 'Edit Data Pelanggan' : 'Tambah Pelanggan Baru'}
+              </h3>
+              <button 
+                type="button"
+                onClick={() => setShowCustomerModal(false)}
+                className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                title="Tutup"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-4 sm:p-5 overflow-y-auto space-y-4 flex-1">
               <div>
                 <label className="block text-sm font-bold text-gray-800 mb-1">Plat Nomor Kendaraan</label>
                 <input 
@@ -2731,16 +2741,16 @@ export default function OwnerDashboard() {
                 </select>
               </div>
             </div>
-            <div className="mt-6 flex justify-end space-x-3">
+            <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-end space-x-3 shrink-0 rounded-b-2xl">
               <button 
                 onClick={() => setShowCustomerModal(false)} 
-                className="px-4 py-2 font-bold text-gray-700 hover:bg-gray-100 rounded-lg"
+                className="px-4 py-2 font-bold text-gray-700 hover:bg-gray-200 bg-gray-100 rounded-lg text-sm cursor-pointer"
               >
                 Batal
               </button>
               <button 
                 onClick={handleSaveCustomer} 
-                className="px-4 py-2 font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow"
+                className="px-4 py-2 font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow text-sm cursor-pointer"
               >
                 Simpan Pelanggan
               </button>
@@ -2751,21 +2761,31 @@ export default function OwnerDashboard() {
 
       {/* Modal Tukar Poin Loyalti Pelanggan */}
       {showRedeemModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 border border-gray-200 text-gray-900">
-            <div className="flex items-center space-x-3 mb-4">
-              <div className="p-2.5 bg-amber-100 text-amber-700 rounded-xl">
-                <Gift size={24} />
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col border border-gray-200 text-gray-900 overflow-hidden my-auto">
+            <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between shrink-0 bg-white">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 bg-amber-100 text-amber-700 rounded-xl">
+                  <Gift size={24} />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-xl text-gray-900">Tukar Poin Loyalti</h3>
+                  <p className="text-xs text-gray-600 font-medium mt-0.5">
+                    Kendaraan: <b className="font-mono text-gray-900">{showRedeemModal.plat}</b> (Poin: <b className="text-blue-600">{showRedeemModal.poin} pts</b>)
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-extrabold text-xl text-gray-900">Tukar Poin Loyalti</h3>
-                <p className="text-xs text-gray-600 font-medium mt-0.5">
-                  Kendaraan: <b className="font-mono text-gray-900">{showRedeemModal.plat}</b> (Poin: <b className="text-blue-600">{showRedeemModal.poin} pts</b>)
-                </p>
-              </div>
+              <button 
+                type="button"
+                onClick={() => setShowRedeemModal(null)}
+                className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                title="Tutup"
+              >
+                <X size={20} />
+              </button>
             </div>
 
-            <div className="space-y-3 mb-6">
+            <div className="p-4 sm:p-5 overflow-y-auto space-y-3 flex-1">
               {[
                 { name: "Gratis 1x Isi Nitrogen Motor", pts: 30, desc: "Potong 30 Poin" },
                 { name: "Diskon Tambal Ban Rp 5.000", pts: 50, desc: "Potong 50 Poin" },
@@ -2783,7 +2803,7 @@ export default function OwnerDashboard() {
                   <button
                     disabled={showRedeemModal.poin < reward.pts}
                     onClick={() => handleRedeemReward(showRedeemModal, reward.pts, reward.name)}
-                    className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 disabled:bg-gray-200 text-white font-bold text-xs rounded-lg transition-all shadow-sm"
+                    className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 disabled:bg-gray-200 text-white font-bold text-xs rounded-lg transition-all shadow-sm cursor-pointer disabled:cursor-not-allowed"
                   >
                     Klaim
                   </button>
@@ -2791,10 +2811,11 @@ export default function OwnerDashboard() {
               ))}
             </div>
 
-            <div className="flex justify-end">
+            <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-end shrink-0 rounded-b-2xl">
               <button 
+                type="button"
                 onClick={() => setShowRedeemModal(null)} 
-                className="px-4 py-2 font-bold text-gray-700 hover:bg-gray-100 rounded-lg"
+                className="px-4 py-2 font-bold text-gray-700 hover:bg-gray-200 bg-gray-100 rounded-lg text-sm cursor-pointer"
               >
                 Tutup
               </button>
@@ -2805,10 +2826,25 @@ export default function OwnerDashboard() {
 
       {/* Add Product Modal */}
       {showProductModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 border border-gray-200 text-gray-900">
-            <h3 className="font-extrabold text-xl mb-4 text-gray-900">{newProduct.id ? 'Edit Produk' : 'Tambah Produk Baru'}</h3>
-            <div className="space-y-4">
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col border border-gray-200 text-gray-900 overflow-hidden my-auto">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between shrink-0 bg-white">
+              <h3 className="font-extrabold text-xl text-gray-900">
+                {newProduct.id ? 'Edit Produk' : 'Tambah Produk Baru'}
+              </h3>
+              <button 
+                type="button"
+                onClick={() => { setShowProductModal(false); setNewProduct({ name: '', harga: 0, hpp: 0, stok: 0, img: '', category: 'nitrogen' }); }}
+                className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                title="Tutup"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Scrollable Body */}
+            <div className="p-4 sm:p-5 overflow-y-auto space-y-4 flex-1">
               <div>
                 <label className="block text-sm font-bold text-gray-800 mb-1">Nama Produk</label>
                 <input type="text" className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900 bg-white" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} />
@@ -2909,74 +2945,94 @@ export default function OwnerDashboard() {
                 </div>
               </div>
               {newProduct.img && (
-                 <div className="mt-2 text-center">
-                    <img src={newProduct.img} alt="Preview" className="w-24 h-24 object-cover mx-auto rounded border" />
+                 <div className="mt-1 text-center">
+                    <img src={newProduct.img} alt="Preview" className="w-16 h-16 object-cover mx-auto rounded-lg border border-gray-200" />
                  </div>
               )}
             </div>
-            <div className="mt-6 flex justify-between items-center">
-              {newProduct.id && (
-                <button onClick={async () => {
-                  if (!confirm('Hapus produk ini? Tindakan tidak dapat dibatalkan.')) return;
-                  try {
-                    await supabase.from('products').delete().eq('id', newProduct.id);
-                    const updated = products.filter(p => p.id !== newProduct.id);
-                    setProducts(updated);
-                    saveProducts(updated);
-                    setShowProductModal(false);
-                    setNewProduct({ name: '', harga: 0, hpp: 0, stok: 0, img: '', category: 'nitrogen' });
-                    alert('Produk berhasil dihapus!');
-                  } catch (err: any) {
-                    alert('Gagal menghapus: ' + (err?.message || 'Error'));
-                  }
-                }} className="px-4 py-2 font-bold text-red-600 hover:bg-red-50 border border-red-200 rounded-lg text-sm">🗑 Hapus</button>
-              )}
-              <div className="flex space-x-3 ml-auto">
-                <button onClick={() => { setShowProductModal(false); setNewProduct({ name: '', harga: 0, hpp: 0, stok: 0, img: '', category: 'nitrogen' }); }} className="px-4 py-2 font-bold text-gray-600 hover:bg-gray-100 rounded-lg">Batal</button>
-                <button onClick={async () => {
-                  if (!newProduct.name.trim()) { alert('Nama produk tidak boleh kosong!'); return; }
-                  try {
-                    let updated: any[];
-                    if (newProduct.id) {
-                      // Update di Supabase
-                      const { error } = await supabase.from('products').update({
-                        name: newProduct.name,
-                        harga: newProduct.harga,
-                        hpp: newProduct.hpp,
-                        stok: newProduct.stok,
-                        img: newProduct.img,
-                        category: newProduct.category,
-                        updated_at: new Date().toISOString()
-                      }).eq('id', newProduct.id);
-                      if (error) throw error;
-                      updated = products.map(p => p.id === newProduct.id ? { ...newProduct } : p);
-                      alert('Produk berhasil diperbarui!');
-                    } else {
-                      // Insert ke Supabase
-                      const { data: inserted, error } = await supabase.from('products').insert({
-                        name: newProduct.name,
-                        harga: newProduct.harga,
-                        hpp: newProduct.hpp,
-                        stok: newProduct.stok,
-                        img: newProduct.img,
-                        category: newProduct.category
-                      }).select().single();
-                      if (error) throw error;
-                      updated = [...products, inserted];
-                      alert('Produk berhasil ditambahkan!');
+
+            {/* Modal Footer (Pinned at bottom, always fully visible) */}
+            <div className="p-4 border-t border-gray-100 bg-gray-50 flex items-center justify-between shrink-0 rounded-b-2xl">
+              {newProduct.id ? (
+                <button 
+                  type="button"
+                  onClick={async () => {
+                    if (!confirm('Hapus produk ini? Tindakan tidak dapat dibatalkan.')) return;
+                    try {
+                      await supabase.from('products').delete().eq('id', newProduct.id);
+                      const updated = products.filter(p => p.id !== newProduct.id);
+                      setProducts(updated);
+                      saveProducts(updated);
+                      setShowProductModal(false);
+                      setNewProduct({ name: '', harga: 0, hpp: 0, stok: 0, img: '', category: 'nitrogen' });
+                      alert('Produk berhasil dihapus!');
+                    } catch (err: any) {
+                      alert('Gagal menghapus: ' + (err?.message || 'Error'));
                     }
-                    setProducts(updated);
-                    saveProducts(updated);
-                    // Broadcast ke kasir agar update real-time
-                    const bc = new BroadcastChannel('pos_demo_channel');
-                    bc.postMessage({ type: 'DB_UPDATE', payload: { entity: 'products' } });
-                    bc.close();
-                    setShowProductModal(false);
-                    setNewProduct({ name: '', harga: 0, hpp: 0, stok: 0, img: '', category: 'nitrogen' });
-                  } catch (err: any) {
-                    alert('Gagal menyimpan produk: ' + (err?.message || 'Error koneksi Supabase'));
-                  }
-                }} className="px-4 py-2 font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow">Simpan Produk</button>
+                  }} 
+                  className="px-4 py-2 font-bold text-red-600 hover:bg-red-50 border border-red-200 rounded-lg text-sm cursor-pointer"
+                >
+                  🗑 Hapus
+                </button>
+              ) : <div></div>}
+              <div className="flex space-x-3 ml-auto">
+                <button 
+                  type="button"
+                  onClick={() => { setShowProductModal(false); setNewProduct({ name: '', harga: 0, hpp: 0, stok: 0, img: '', category: 'nitrogen' }); }} 
+                  className="px-4 py-2 font-bold text-gray-700 hover:bg-gray-200 bg-gray-100 rounded-lg text-sm cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button 
+                  type="button"
+                  onClick={async () => {
+                    if (!newProduct.name.trim()) { alert('Nama produk tidak boleh kosong!'); return; }
+                    try {
+                      let updated: any[];
+                      if (newProduct.id) {
+                        // Update di Supabase
+                        const { error } = await supabase.from('products').update({
+                          name: newProduct.name,
+                          harga: newProduct.harga,
+                          hpp: newProduct.hpp,
+                          stok: newProduct.stok,
+                          img: newProduct.img,
+                          category: newProduct.category,
+                          updated_at: new Date().toISOString()
+                        }).eq('id', newProduct.id);
+                        if (error) throw error;
+                        updated = products.map(p => p.id === newProduct.id ? { ...newProduct } : p);
+                        alert('Produk berhasil diperbarui!');
+                      } else {
+                        // Insert ke Supabase
+                        const { data: inserted, error } = await supabase.from('products').insert({
+                          name: newProduct.name,
+                          harga: newProduct.harga,
+                          hpp: newProduct.hpp,
+                          stok: newProduct.stok,
+                          img: newProduct.img,
+                          category: newProduct.category
+                        }).select().single();
+                        if (error) throw error;
+                        updated = [...products, inserted];
+                        alert('Produk berhasil ditambahkan!');
+                      }
+                      setProducts(updated);
+                      saveProducts(updated);
+                      // Broadcast ke kasir agar update real-time
+                      const bc = new BroadcastChannel('pos_demo_channel');
+                      bc.postMessage({ type: 'DB_UPDATE', payload: { entity: 'products' } });
+                      bc.close();
+                      setShowProductModal(false);
+                      setNewProduct({ name: '', harga: 0, hpp: 0, stok: 0, img: '', category: 'nitrogen' });
+                    } catch (err: any) {
+                      alert('Gagal menyimpan produk: ' + (err?.message || 'Error koneksi Supabase'));
+                    }
+                  }} 
+                  className="px-5 py-2 font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm text-sm cursor-pointer"
+                >
+                  Simpan Produk
+                </button>
               </div>
             </div>
           </div>
@@ -2986,10 +3042,21 @@ export default function OwnerDashboard() {
 
       {/* Add / Edit Operator Modal */}
       {showOperatorModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 border border-gray-200 text-gray-900">
-            <h3 className="font-extrabold text-xl mb-4 text-gray-900">{newOperator.id ? 'Edit Akses Kasir' : 'Tambah Kasir Baru'}</h3>
-            <div className="space-y-4">
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col border border-gray-200 text-gray-900 overflow-hidden my-auto">
+            <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between shrink-0 bg-white">
+              <h3 className="font-extrabold text-xl text-gray-900">{newOperator.id ? 'Edit Akses Kasir' : 'Tambah Kasir Baru'}</h3>
+              <button 
+                type="button"
+                onClick={() => { setShowOperatorModal(false); setNewOperator({ name: '', pin: '', branch: '' }); }}
+                className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                title="Tutup"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="p-4 sm:p-5 overflow-y-auto space-y-4 flex-1">
               <div>
                 <label className="block text-sm font-bold text-gray-800 mb-1">Nama Lengkap</label>
                 <input type="text" className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900 bg-white" value={newOperator.name} onChange={e => setNewOperator({...newOperator, name: e.target.value})} placeholder="Misal: Budi Santoso" />
@@ -3005,26 +3072,39 @@ export default function OwnerDashboard() {
                 </select>
               </div>
             </div>
-            <div className="mt-6 flex justify-end space-x-3">
-              <button onClick={() => { setShowOperatorModal(false); setNewOperator({ name: '', pin: '', branch: '' }); }} className="px-4 py-2 font-bold text-gray-700 hover:bg-gray-100 rounded-lg">Batal</button>
-              <button onClick={() => {
-                if (!newOperator.name || !newOperator.pin || !newOperator.branch) {
-                  alert("Harap lengkapi semua data!");
-                  return;
-                }
-                let newOps;
-                if (newOperator.id) {
-                  newOps = operators.map(o => o.id === newOperator.id ? { ...newOperator } : o);
-                  alert(`Akses kasir ${newOperator.name} berhasil diperbarui!`);
-                } else {
-                  newOps = [...operators, { ...newOperator, id: Date.now() }];
-                  alert(`Kasir ${newOperator.name} berhasil ditambahkan!`);
-                }
-                setOperators(newOps);
-                saveOperators(newOps);
-                setShowOperatorModal(false);
-                setNewOperator({ name: '', pin: '', branch: '' });
-              }} className="px-4 py-2 font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow">Simpan Karyawan</button>
+
+            <div className="p-4 border-t border-gray-100 bg-gray-50 flex justify-end space-x-3 shrink-0 rounded-b-2xl">
+              <button 
+                type="button"
+                onClick={() => { setShowOperatorModal(false); setNewOperator({ name: '', pin: '', branch: '' }); }} 
+                className="px-4 py-2 font-bold text-gray-700 hover:bg-gray-200 bg-gray-100 rounded-lg text-sm cursor-pointer"
+              >
+                Batal
+              </button>
+              <button 
+                type="button"
+                onClick={() => {
+                  if (!newOperator.name || !newOperator.pin || !newOperator.branch) {
+                    alert("Harap lengkapi semua data!");
+                    return;
+                  }
+                  let newOps;
+                  if (newOperator.id) {
+                    newOps = operators.map(o => o.id === newOperator.id ? { ...newOperator } : o);
+                    alert(`Akses kasir ${newOperator.name} berhasil diperbarui!`);
+                  } else {
+                    newOps = [...operators, { ...newOperator, id: Date.now() }];
+                    alert(`Kasir ${newOperator.name} berhasil ditambahkan!`);
+                  }
+                  setOperators(newOps);
+                  saveOperators(newOps);
+                  setShowOperatorModal(false);
+                  setNewOperator({ name: '', pin: '', branch: '' });
+                }} 
+                className="px-4 py-2 font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow text-sm cursor-pointer"
+              >
+                Simpan Karyawan
+              </button>
             </div>
           </div>
         </div>
@@ -3066,9 +3146,9 @@ export default function OwnerDashboard() {
 
       {/* Telegram Fraud Alert Detail Modal */}
       {selectedFraudModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setSelectedFraudModal(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 overflow-hidden border border-red-100 animate-in fade-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-start border-b pb-4">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto" onClick={() => setSelectedFraudModal(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden border border-red-100 my-auto animate-in fade-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
+            <div className="p-4 sm:p-5 flex justify-between items-start border-b border-gray-100 shrink-0 bg-white">
               <div className="flex items-center space-x-3">
                 <div className="p-2 bg-red-100 text-red-600 rounded-xl">
                   <AlertCircle size={24} />
@@ -3080,12 +3160,17 @@ export default function OwnerDashboard() {
                   <h3 className="text-lg font-black text-gray-900 leading-snug">{selectedFraudModal.title}</h3>
                 </div>
               </div>
-              <button onClick={() => setSelectedFraudModal(null)} className="text-gray-400 hover:text-gray-600 p-1">
+              <button 
+                type="button"
+                onClick={() => setSelectedFraudModal(null)} 
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg cursor-pointer"
+                title="Tutup"
+              >
                 <X size={20} />
               </button>
             </div>
 
-            <div className="py-4 space-y-4">
+            <div className="p-4 sm:p-5 overflow-y-auto space-y-4 flex-1">
               {/* Info Grid */}
               <div className="grid grid-cols-2 gap-3 bg-gray-50 p-3 rounded-xl border border-gray-100 text-xs">
                 <div>
@@ -3137,6 +3222,7 @@ export default function OwnerDashboard() {
                       <Camera size={14} className="mr-1 text-blue-600" /> Bukti Foto CCTV Terkait:
                     </p>
                     <button
+                      type="button"
                       onClick={async () => {
                         if (!confirm("Hapus gambar bukti dari log fraud ini?")) return;
                         try {
@@ -3152,7 +3238,7 @@ export default function OwnerDashboard() {
                           alert("Gagal menghapus gambar: " + (err?.message || "Error"));
                         }
                       }}
-                      className="text-xs font-bold text-red-600 hover:text-red-800 hover:underline flex items-center space-x-1"
+                      className="text-xs font-bold text-red-600 hover:text-red-800 hover:underline flex items-center space-x-1 cursor-pointer"
                     >
                       <Trash2 size={12} />
                       <span>Hapus Gambar Bukti</span>
@@ -3171,29 +3257,32 @@ export default function OwnerDashboard() {
               )}
             </div>
 
-            <div className="pt-3 border-t flex flex-col sm:flex-row justify-end gap-2">
+            <div className="p-4 border-t border-gray-100 bg-gray-50 shrink-0 rounded-b-2xl flex flex-col sm:flex-row justify-end gap-2">
               <button 
+                type="button"
                 onClick={() => {
                   alert(`🚨 Notifikasi Ulang Berhasil Terkirim!\n\nPesan darurat telah dikirim kembali ke Telegram Bot @AlKahfiAlertBot untuk cabang ${selectedFraudModal.branch}.`);
                 }}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center justify-center space-x-1.5 shadow-sm transition-all"
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center justify-center space-x-1.5 shadow-sm transition-all cursor-pointer"
               >
                 <Send size={13} />
                 <span>Kirim Ulang ke Telegram</span>
               </button>
               <button 
+                type="button"
                 onClick={() => {
                   setSelectedFraudModal(null);
                   setActiveTab("audit");
                 }} 
-                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center justify-center space-x-1.5 transition-all"
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center justify-center space-x-1.5 transition-all cursor-pointer"
               >
                 <Camera size={13} />
                 <span>Investigasi di Audit CCTV</span>
               </button>
               <button 
+                type="button"
                 onClick={() => setSelectedFraudModal(null)} 
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition-all"
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
               >
                 Tutup
               </button>
@@ -3204,19 +3293,24 @@ export default function OwnerDashboard() {
 
       {/* Branch Configuration Modal */}
       {selectedBranchConfig && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6">
-            <div className="flex justify-between items-center mb-4">
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col border border-gray-200 overflow-hidden my-auto">
+            <div className="p-4 sm:p-5 flex justify-between items-center border-b border-gray-100 shrink-0 bg-white">
               <div>
-                <h3 className="font-bold text-lg text-gray-800">Konfigurasi Node IoT: {selectedBranchConfig.name}</h3>
+                <h3 className="font-extrabold text-lg text-gray-900">Konfigurasi Node IoT: {selectedBranchConfig.name}</h3>
                 <p className="text-xs text-gray-700 font-bold">Sinkronisasi Hardware ESP32 & Solenoid Valve</p>
               </div>
-              <button onClick={() => setSelectedBranchConfig(null)} className="text-gray-400 hover:text-gray-600">
+              <button 
+                type="button"
+                onClick={() => setSelectedBranchConfig(null)} 
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg cursor-pointer"
+                title="Tutup"
+              >
                 <X size={20} />
               </button>
             </div>
             
-            <div className="space-y-4">
+            <div className="p-4 sm:p-5 overflow-y-auto space-y-4 flex-1">
               <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl">
                 <p className="text-xs font-bold text-blue-800 mb-1">Status Sinkronisasi ESP32 (System A - Time Starvation)</p>
                 <p className="text-xs text-blue-700 leading-relaxed">
@@ -3227,11 +3321,11 @@ export default function OwnerDashboard() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-gray-700 mb-1">Nama Cabang</label>
-                  <input type="text" value={selectedBranchConfig.name} onChange={(e) => setSelectedBranchConfig({...selectedBranchConfig, name: e.target.value})} className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-sm text-gray-900" />
+                  <input type="text" value={selectedBranchConfig.name} onChange={(e) => setSelectedBranchConfig({...selectedBranchConfig, name: e.target.value})} className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-sm text-gray-900 bg-white" />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-700 mb-1">Device Code (ESP32 Node ID)</label>
-                  <input type="text" value={selectedBranchConfig.deviceCode || 'NITRO-01'} onChange={(e) => setSelectedBranchConfig({...selectedBranchConfig, deviceCode: e.target.value})} className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-mono font-bold text-sm text-blue-800" />
+                  <input type="text" value={selectedBranchConfig.deviceCode || 'NITRO-01'} onChange={(e) => setSelectedBranchConfig({...selectedBranchConfig, deviceCode: e.target.value})} className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-mono font-bold text-sm text-blue-800 bg-white" />
                 </div>
               </div>
 
@@ -3273,7 +3367,7 @@ export default function OwnerDashboard() {
               </div>
             </div>
             
-            <div className="mt-6 pt-4 border-t flex flex-col sm:flex-row justify-between items-center gap-2">
+            <div className="p-4 border-t border-gray-100 bg-gray-50 flex flex-col sm:flex-row justify-between items-center gap-2 shrink-0 rounded-b-2xl">
               <button 
                 type="button"
                 onClick={async () => {
@@ -3294,36 +3388,48 @@ export default function OwnerDashboard() {
                     alert(`Gagal mengirim sinyal test: ${err?.message || 'Error koneksi Supabase'}`);
                   }
                 }}
-                className="w-full sm:w-auto px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold shadow-sm transition-all flex items-center justify-center space-x-1"
+                className="w-full sm:w-auto px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold shadow-sm transition-all flex items-center justify-center space-x-1 cursor-pointer"
               >
                 <span>⚡ Test Buka Valve (5s)</span>
               </button>
 
               <div className="flex space-x-2 w-full sm:w-auto justify-end">
-                <button onClick={() => setSelectedBranchConfig(null)} className="px-4 py-2 font-bold text-gray-600 hover:bg-gray-100 rounded-lg text-sm">Batal</button>
-                <button onClick={async () => {
-                  try {
-                    const devCode = selectedBranchConfig.deviceCode || 'NITRO-01';
-                    await supabase
-                      .from('branch_devices')
-                      .update({
-                        updated_at: new Date().toISOString()
-                      })
-                      .eq('device_code', devCode);
+                <button 
+                  type="button"
+                  onClick={() => setSelectedBranchConfig(null)} 
+                  className="px-4 py-2 font-bold text-gray-700 hover:bg-gray-200 bg-gray-100 rounded-lg text-sm cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button 
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const devCode = selectedBranchConfig.deviceCode || 'NITRO-01';
+                      await supabase
+                        .from('branch_devices')
+                        .update({
+                          updated_at: new Date().toISOString()
+                        })
+                        .eq('device_code', devCode);
 
-                    setBranchStats((prev) => {
-                      const newStats = [...prev];
-                      newStats[selectedBranchConfig.index] = { ...selectedBranchConfig };
-                      delete newStats[selectedBranchConfig.index].index;
-                      saveBranches(newStats);
-                      return newStats;
-                    });
-                    alert(`✅ Konfigurasi untuk ${selectedBranchConfig.name} (${devCode}) berhasil disimpan dan disinkronkan ke Cloud Supabase & ESP32!`);
-                    setSelectedBranchConfig(null);
-                  } catch (err: any) {
-                    alert(`Gagal menyimpan: ${err?.message || 'Error'}`);
-                  }
-                }} className="px-4 py-2 font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow text-sm">Simpan</button>
+                      setBranchStats((prev) => {
+                        const newStats = [...prev];
+                        newStats[selectedBranchConfig.index] = { ...selectedBranchConfig };
+                        delete newStats[selectedBranchConfig.index].index;
+                        saveBranches(newStats);
+                        return newStats;
+                      });
+                      alert(`✅ Konfigurasi untuk ${selectedBranchConfig.name} (${devCode}) berhasil disimpan dan disinkronkan ke Cloud Supabase & ESP32!`);
+                      setSelectedBranchConfig(null);
+                    } catch (err: any) {
+                      alert(`Gagal menyimpan: ${err?.message || 'Error'}`);
+                    }
+                  }} 
+                  className="px-4 py-2 font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow text-sm cursor-pointer"
+                >
+                  Simpan
+                </button>
               </div>
             </div>
           </div>
