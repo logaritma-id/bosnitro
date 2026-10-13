@@ -1540,9 +1540,19 @@ export default function OwnerDashboard() {
                         </td>
                         <td className="p-4">
                           {prod.category === 'nitrogen' ? (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-700">⚗️ Nitrogen</span>
+                            prod.name.toLowerCase().includes('mobil') ? (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-cyan-100 text-cyan-800 border border-cyan-200">
+                                🚗 Nitrogen Mobil
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                                🏍️ Nitrogen Motor
+                              </span>
+                            )
                           ) : (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-700">🛒 Ritel</span>
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-800 border border-purple-200">
+                              🛒 Ritel
+                            </span>
                           )}
                         </td>
                         <td className="p-4 text-right font-semibold text-gray-700">Rp {prod.harga.toLocaleString('id-ID')}</td>
@@ -2821,6 +2831,53 @@ export default function OwnerDashboard() {
                     <span>🛒</span><span>Ritel & Aksesoris</span>
                   </button>
                 </div>
+
+                {newProduct.category === 'nitrogen' && (
+                  <div className="mt-3 p-3 bg-blue-50/70 rounded-xl border border-blue-200">
+                    <label className="block text-xs font-extrabold text-blue-900 mb-1.5">
+                      Tipe Kendaraan di Kasir POS:
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const base = newProduct.name.replace(/\s*(Motor|Mobil)\s*$/i, '').trim();
+                          setNewProduct({
+                            ...newProduct,
+                            name: base ? `${base} Motor` : 'Layanan Motor'
+                          });
+                        }}
+                        className={`py-2 px-3 rounded-lg border text-xs font-bold flex items-center justify-center space-x-1.5 transition-all cursor-pointer ${
+                          newProduct.name.toLowerCase().includes('motor') || (!newProduct.name.toLowerCase().includes('mobil') && newProduct.category === 'nitrogen')
+                            ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        <span>🏍️</span><span>Khusus Motor</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const base = newProduct.name.replace(/\s*(Motor|Mobil)\s*$/i, '').trim();
+                          setNewProduct({
+                            ...newProduct,
+                            name: base ? `${base} Mobil` : 'Layanan Mobil'
+                          });
+                        }}
+                        className={`py-2 px-3 rounded-lg border text-xs font-bold flex items-center justify-center space-x-1.5 transition-all cursor-pointer ${
+                          newProduct.name.toLowerCase().includes('mobil')
+                            ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        <span>🚗</span><span>Khusus Mobil</span>
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-blue-800 font-medium mt-1.5">
+                      Produk ini akan tampil di varian {newProduct.name.toLowerCase().includes('mobil') ? 'Mobil' : 'Motor'} pada tab Layanan Nitrogen kasir.
+                    </p>
+                  </div>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>

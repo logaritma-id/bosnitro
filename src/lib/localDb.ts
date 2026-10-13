@@ -4,10 +4,19 @@ export const DEFAULT_OPERATORS = [
 ];
 
 export const DEFAULT_PRODUCTS = [
+  // Layanan Nitrogen Motor
   { id: 1, name: "Isi Baru Motor", harga: 5000, hpp: 500, stok: 999, img: "https://placehold.co/100x100/1e293b/ffffff?text=Isi+Baru", category: "nitrogen" },
-  { id: 2, name: "Tambal Ban Motor", harga: 15000, hpp: 1000, stok: 4, img: "https://placehold.co/100x100/1e293b/ffffff?text=Tambal", category: "nitrogen" },
-  { id: 3, name: "Ganti Oli Mesin", harga: 50000, hpp: 35000, stok: 12, img: "https://placehold.co/100x100/1e293b/ffffff?text=Oli", category: "ritel" },
-  { id: 4, name: "Cairan Tubles", harga: 35000, hpp: 20000, stok: 2, img: "https://placehold.co/100x100/1e293b/ffffff?text=Tubles", category: "ritel" },
+  { id: 2, name: "Tambah Angin Motor", harga: 2000, hpp: 200, stok: 999, img: "https://placehold.co/100x100/1e293b/ffffff?text=Tambah", category: "nitrogen" },
+  { id: 3, name: "Tambal Ban Motor", harga: 15000, hpp: 1000, stok: 4, img: "https://placehold.co/100x100/1e293b/ffffff?text=Tambal", category: "nitrogen" },
+  
+  // Layanan Nitrogen Mobil
+  { id: 4, name: "Isi Baru Mobil", harga: 10000, hpp: 1000, stok: 999, img: "https://placehold.co/100x100/1e293b/ffffff?text=Isi+Mobil", category: "nitrogen" },
+  { id: 5, name: "Tambah Angin Mobil", harga: 5000, hpp: 500, stok: 999, img: "https://placehold.co/100x100/1e293b/ffffff?text=Tambah+Mobil", category: "nitrogen" },
+  { id: 6, name: "Tambal Ban Mobil", harga: 25000, hpp: 2000, stok: 999, img: "https://placehold.co/100x100/1e293b/ffffff?text=Tambal+Mobil", category: "nitrogen" },
+
+  // Ritel & Aksesoris
+  { id: 7, name: "Ganti Oli Mesin", harga: 50000, hpp: 35000, stok: 12, img: "https://placehold.co/100x100/1e293b/ffffff?text=Oli", category: "ritel" },
+  { id: 8, name: "Cairan Tubles", harga: 35000, hpp: 20000, stok: 2, img: "https://placehold.co/100x100/1e293b/ffffff?text=Tubles", category: "ritel" },
 ];
 
 export function getOperators() {

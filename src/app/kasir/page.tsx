@@ -852,25 +852,68 @@ export default function KasirPage() {
                     </div>
                     
                     <div className="flex-1 overflow-y-auto space-y-3 pr-1 pb-4">
-                      {products.filter(p => p.category === 'nitrogen').map((product) => (
-                        <button
-                          key={product.id}
-                          onClick={() => addToCart(product)}
-                          className="w-full p-4 md:p-5 border-2 border-gray-100 rounded-2xl hover:border-blue-500 hover:bg-blue-50 bg-white transition-all flex items-center justify-between group shadow-sm hover:shadow-md"
-                        >
-                          <div className="flex items-center space-x-4">
-                            <div className="w-12 h-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                               {product.name.toLowerCase().includes('baru') ? <Plus size={24} /> : product.name.toLowerCase().includes('tambah') ? <RefreshCcw size={24} /> : <Wrench size={24} />}
+                      {products
+                        .filter(p => {
+                          if (p.category !== 'nitrogen' && !p.category?.startsWith('nitrogen')) return false;
+                          const name = (p.name || '').toLowerCase();
+                          const cat = (p.category || '').toLowerCase();
+                          const vTag = ((p as any).vehicle || '').toLowerCase();
+
+                          if (vehicleType === 'motor') {
+                            if (vTag === 'motor') return true;
+                            if (vTag === 'mobil') return false;
+                            return name.includes('motor') || cat.includes('motor') || (!name.includes('mobil') && !cat.includes('mobil'));
+                          }
+                          if (vehicleType === 'mobil') {
+                            if (vTag === 'mobil') return true;
+                            if (vTag === 'motor') return false;
+                            return name.includes('mobil') || cat.includes('mobil');
+                          }
+                          return true;
+                        })
+                        .map((product) => (
+                          <button
+                            key={product.id}
+                            onClick={() => addToCart(product)}
+                            className="w-full p-4 md:p-5 border-2 border-gray-100 rounded-2xl hover:border-blue-500 hover:bg-blue-50 bg-white transition-all flex items-center justify-between group shadow-sm hover:shadow-md cursor-pointer"
+                          >
+                            <div className="flex items-center space-x-4">
+                              <div className="w-12 h-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-colors shrink-0">
+                                 {product.name.toLowerCase().includes('baru') ? <Plus size={24} /> : product.name.toLowerCase().includes('tambah') ? <RefreshCcw size={24} /> : <Wrench size={24} />}
+                              </div>
+                              <div className="text-left">
+                                <span className="font-bold text-gray-800 text-lg md:text-xl block">{product.name}</span>
+                                <span className="text-gray-600 text-sm font-semibold">
+                                  {product.name.toLowerCase().includes('baru') 
+                                    ? 'Pengurasan & Isi Ulang' 
+                                    : product.name.toLowerCase().includes('tambah') 
+                                    ? 'Penambahan Tekanan' 
+                                    : product.name.toLowerCase().includes('tambal')
+                                    ? 'Perbaikan Ban Bocor'
+                                    : 'Layanan Nitrogen Kendaraan'}
+                                </span>
+                              </div>
                             </div>
-                            <div className="text-left">
-                              <span className="font-bold text-gray-800 text-lg md:text-xl block">{product.name}</span>
-                              <span className="text-gray-600 text-sm font-semibold">{product.name.toLowerCase().includes('baru') ? 'Pengurasan & Isi Ulang' : product.name.toLowerCase().includes('tambah') ? 'Penambahan Tekanan' : 'Perbaikan Ban Bocor'}</span>
-                            </div>
-                          </div>
-                          <span className="text-blue-600 font-black text-xl">Rp {product.harga.toLocaleString('id-ID')}</span>
-                        </button>
-                      ))}
-                      {products.filter(p => p.category === 'nitrogen').length === 0 && (
+                            <span className="text-blue-600 font-black text-xl whitespace-nowrap ml-4">Rp {product.harga.toLocaleString('id-ID')}</span>
+                          </button>
+                        ))}
+                      {products.filter(p => {
+                        if (p.category !== 'nitrogen' && !p.category?.startsWith('nitrogen')) return false;
+                        const name = (p.name || '').toLowerCase();
+                        const cat = (p.category || '').toLowerCase();
+                        const vTag = ((p as any).vehicle || '').toLowerCase();
+                        if (vehicleType === 'motor') {
+                          if (vTag === 'motor') return true;
+                          if (vTag === 'mobil') return false;
+                          return name.includes('motor') || cat.includes('motor') || (!name.includes('mobil') && !cat.includes('mobil'));
+                        }
+                        if (vehicleType === 'mobil') {
+                          if (vTag === 'mobil') return true;
+                          if (vTag === 'motor') return false;
+                          return name.includes('mobil') || cat.includes('mobil');
+                        }
+                        return true;
+                      }).length === 0 && (
                         <div className="text-center p-8 text-gray-600 font-bold border-2 border-dashed border-gray-300 rounded-2xl">
                           Belum ada layanan untuk {vehicleType}.
                         </div>
