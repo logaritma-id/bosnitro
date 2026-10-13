@@ -6,7 +6,7 @@ import { uploadSnapshot } from "@/lib/cloudinary";
 import { printReceipt, connectPrinter, activePrinterDevice } from "@/lib/print";
 import { Camera, Printer, ShoppingCart, Info, ScanLine, User, MapPin, Wifi, Bluetooth, Plus, Minus, Trash2, XCircle, RefreshCcw, Video, ChevronLeft, Wrench, CheckCircle, Lock, Unlock, LogOut } from "lucide-react";
 
-import { getProducts, getOperators, getBranches } from "@/lib/localDb";
+import { getProducts, saveProducts, getOperators, getBranches } from "@/lib/localDb";
 
 type Product = {
   id: string | number;
@@ -55,6 +55,23 @@ export default function KasirPage() {
     if (savedBranches && savedBranches.length > 0) {
       setBranchName(savedBranches[0].name);
     }
+
+    // Load produk dari Supabase (lebih prioritas dari localStorage)
+    const loadProductsFromSupabase = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('products')
+          .select('*')
+          .order('id', { ascending: true });
+        if (data && !error && data.length > 0) {
+          setProducts(data as any);
+          saveProducts(data);
+        }
+      } catch (e) {
+        // fallback ke localStorage sudah di-set di atas
+      }
+    };
+    loadProductsFromSupabase();
     
     // Broadcast listener for live DB updates
     const channel = new BroadcastChannel('pos_demo_channel');

@@ -365,6 +365,23 @@ export default function OwnerDashboard() {
     // Load data Supabase saat awal mount
     loadDataFromSupabase();
 
+    // Load produk dari Supabase (override localStorage jika ada data di DB)
+    const loadProductsFromSupabase = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('products')
+          .select('*')
+          .order('id', { ascending: true });
+        if (data && !error && data.length > 0) {
+          setProducts(data);
+          saveProducts(data); // sync ke localStorage sebagai cache
+        }
+      } catch (e) {
+        // fallback ke localStorage sudah di-set di atas
+      }
+    };
+    loadProductsFromSupabase();
+
     // Auto-refresh berkala setiap 6 detik
     const pollInterval = setInterval(loadDataFromSupabase, 6000);
 
@@ -1419,7 +1436,7 @@ export default function OwnerDashboard() {
       {showProductModal && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
-            <h3 className="font-bold text-lg mb-4">Tambah Produk Baru</h3>
+            <h3 className="font-bold text-lg mb-4">{newProduct.id ? 'Edit Produk' : 'Tambah Produk Baru'}</h3>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">Nama Produk</label>
@@ -1428,17 +1445,17 @@ export default function OwnerDashboard() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-1">Harga Jual</label>
-                  <input type="number" className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900" value={newProduct.harga} onChange={e => setNewProduct({...newProduct, harga: parseInt(e.target.value)})} />
+                  <input type="number" className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900" value={newProduct.harga} onChange={e => setNewProduct({...newProduct, harga: parseInt(e.target.value) || 0})} />
                 </div>
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-1">HPP (Modal)</label>
-                  <input type="number" className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900" value={newProduct.hpp} onChange={e => setNewProduct({...newProduct, hpp: parseInt(e.target.value)})} />
+                  <input type="number" className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900" value={newProduct.hpp} onChange={e => setNewProduct({...newProduct, hpp: parseInt(e.target.value) || 0})} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1">Stok Awal</label>
-                  <input type="number" className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900" value={newProduct.stok} onChange={e => setNewProduct({...newProduct, stok: parseInt(e.target.value)})} />
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Stok Fisik</label>
+                  <input type="number" className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900" value={newProduct.stok} onChange={e => setNewProduct({...newProduct, stok: parseInt(e.target.value) || 0})} />
                 </div>
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-1">Foto Produk</label>
@@ -1460,26 +1477,73 @@ export default function OwnerDashboard() {
                  </div>
               )}
             </div>
-            <div className="mt-6 flex justify-end space-x-3">
-              <button onClick={() => setShowProductModal(false)} className="px-4 py-2 font-bold text-gray-600 hover:bg-gray-100 rounded-lg">Batal</button>
-              <button onClick={() => {
-                let updated;
-                if (newProduct.id) {
-                   updated = products.map(p => p.id === newProduct.id ? newProduct : p);
-                   alert("Produk berhasil diperbarui!");
-                } else {
-                   updated = [...products, { ...newProduct, id: Date.now() }];
-                   alert("Produk berhasil ditambahkan!");
-                }
-                setProducts(updated);
-                saveProducts(updated);
-                setShowProductModal(false);
-                setNewProduct({ name: '', harga: 0, hpp: 0, stok: 0, img: '' });
-              }} className="px-4 py-2 font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow">Simpan Produk</button>
+            <div className="mt-6 flex justify-between items-center">
+              {newProduct.id && (
+                <button onClick={async () => {
+                  if (!confirm('Hapus produk ini? Tindakan tidak dapat dibatalkan.')) return;
+                  try {
+                    await supabase.from('products').delete().eq('id', newProduct.id);
+                    const updated = products.filter(p => p.id !== newProduct.id);
+                    setProducts(updated);
+                    saveProducts(updated);
+                    setShowProductModal(false);
+                    setNewProduct({ name: '', harga: 0, hpp: 0, stok: 0, img: '' });
+                    alert('Produk berhasil dihapus!');
+                  } catch (err: any) {
+                    alert('Gagal menghapus: ' + (err?.message || 'Error'));
+                  }
+                }} className="px-4 py-2 font-bold text-red-600 hover:bg-red-50 border border-red-200 rounded-lg text-sm">🗑 Hapus</button>
+              )}
+              <div className="flex space-x-3 ml-auto">
+                <button onClick={() => { setShowProductModal(false); setNewProduct({ name: '', harga: 0, hpp: 0, stok: 0, img: '' }); }} className="px-4 py-2 font-bold text-gray-600 hover:bg-gray-100 rounded-lg">Batal</button>
+                <button onClick={async () => {
+                  if (!newProduct.name.trim()) { alert('Nama produk tidak boleh kosong!'); return; }
+                  try {
+                    let updated: any[];
+                    if (newProduct.id) {
+                      // Update di Supabase
+                      const { error } = await supabase.from('products').update({
+                        name: newProduct.name,
+                        harga: newProduct.harga,
+                        hpp: newProduct.hpp,
+                        stok: newProduct.stok,
+                        img: newProduct.img,
+                        updated_at: new Date().toISOString()
+                      }).eq('id', newProduct.id);
+                      if (error) throw error;
+                      updated = products.map(p => p.id === newProduct.id ? { ...newProduct } : p);
+                      alert('Produk berhasil diperbarui!');
+                    } else {
+                      // Insert ke Supabase
+                      const { data: inserted, error } = await supabase.from('products').insert({
+                        name: newProduct.name,
+                        harga: newProduct.harga,
+                        hpp: newProduct.hpp,
+                        stok: newProduct.stok,
+                        img: newProduct.img
+                      }).select().single();
+                      if (error) throw error;
+                      updated = [...products, inserted];
+                      alert('Produk berhasil ditambahkan!');
+                    }
+                    setProducts(updated);
+                    saveProducts(updated);
+                    // Broadcast ke kasir agar update real-time
+                    const bc = new BroadcastChannel('pos_demo_channel');
+                    bc.postMessage({ type: 'DB_UPDATE', payload: { entity: 'products' } });
+                    bc.close();
+                    setShowProductModal(false);
+                    setNewProduct({ name: '', harga: 0, hpp: 0, stok: 0, img: '' });
+                  } catch (err: any) {
+                    alert('Gagal menyimpan produk: ' + (err?.message || 'Error koneksi Supabase'));
+                  }
+                }} className="px-4 py-2 font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow">Simpan Produk</button>
+              </div>
             </div>
           </div>
         </div>
       )}
+
 
       {/* Add Operator Modal */}
       {showOperatorModal && (

@@ -24,6 +24,35 @@ CREATE TABLE IF NOT EXISTS public.branch_devices (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 3. Tabel Master Produk & Stok
+CREATE TABLE IF NOT EXISTS public.products (
+    id BIGSERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    harga INTEGER NOT NULL DEFAULT 0,
+    hpp INTEGER NOT NULL DEFAULT 0,
+    stok INTEGER NOT NULL DEFAULT 0,
+    img TEXT DEFAULT '',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Inisialisasi data produk default
+INSERT INTO public.products (name, harga, hpp, stok, img)
+VALUES
+  ('Isi Baru Motor', 5000, 500, 999, 'https://placehold.co/100x100/1e293b/ffffff?text=Isi+Baru'),
+  ('Tambal Ban Motor', 15000, 1000, 4, 'https://placehold.co/100x100/1e293b/ffffff?text=Tambal'),
+  ('Ganti Oli Mesin', 50000, 35000, 12, 'https://placehold.co/100x100/1e293b/ffffff?text=Oli'),
+  ('Cairan Tubles', 35000, 20000, 2, 'https://placehold.co/100x100/1e293b/ffffff?text=Tubles')
+ON CONFLICT DO NOTHING;
+
+ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Public access products" ON public.products;
+CREATE POLICY "Public access products"
+ON public.products FOR ALL
+USING (true)
+WITH CHECK (true);
+
 -- Inisialisasi perangkat bawaan NITRO-01
 INSERT INTO public.branch_devices (device_code, device_status, active_duration_seconds)
 VALUES ('NITRO-01', 'IDLE', 0)
