@@ -44,6 +44,7 @@ export default function KasirPage() {
   const [showIgnoreReason, setShowIgnoreReason] = useState(false);
   const [cameraStatus, setCameraStatus] = useState<"Loading" | "Ready" | "Error">("Loading");
   const [vehicleType, setVehicleType] = useState<"motor" | "mobil" | null>(null);
+  const [lastSnapshotUrl, setLastSnapshotUrl] = useState<string>("");
   
   const [products, setProducts] = useState<Product[]>([]);
   const [branchName, setBranchName] = useState("");
@@ -87,10 +88,55 @@ export default function KasirPage() {
     setPrinterConnected(success);
   };
 
-  // Setup Camera for background snapshot
+  // Cek Status Real Perangkat IoT dari Database Supabase (branch_devices)
   useEffect(() => {
     setCameraStatus("Ready");
-    setIotStatus("Online");
+
+    const checkRealIotStatus = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('branch_devices')
+          .select('device_status, last_heartbeat, updated_at')
+          .eq('device_code', 'NITRO-01')
+          .single();
+
+        if (data && !error) {
+          const lastTime = new Date(data.updated_at || data.last_heartbeat).getTime();
+          const diffSeconds = (Date.now() - lastTime) / 1000;
+          // Perangkat dianggap Online jika mengirim heartbeat dalam 120 detik terakhir
+          setIotStatus(diffSeconds < 120 ? "Online" : "Offline");
+        } else {
+          setIotStatus("Offline");
+        }
+      } catch (err) {
+        console.error("Gagal memeriksa status IoT:", err);
+        setIotStatus("Offline");
+      }
+    };
+
+    checkRealIotStatus();
+    const interval = setInterval(checkRealIotStatus, 5000);
+
+    // Supabase Realtime channel untuk branch_devices
+    const channel = supabase
+      .channel('kasir_branch_devices_live')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'branch_devices' },
+        (payload: any) => {
+          if (payload.new) {
+            const lastTime = new Date(payload.new.updated_at || payload.new.last_heartbeat).getTime();
+            const diffSeconds = (Date.now() - lastTime) / 1000;
+            setIotStatus(diffSeconds < 120 ? "Online" : "Offline");
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   // Live Camera Feed for Login Attendance
@@ -218,8 +264,44 @@ export default function KasirPage() {
           if (ctx) {
             ctx.drawImage(loginVideoRef.current, 0, 0, canvas.width, canvas.height);
             const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
-            // Non-blocking upload
-            uploadSnapshot(dataUrl).catch(console.error);
+            
+            // Upload ke Cloudinary dan simpan ke Supabase sebagai data ATTENDANCE
+            uploadSnapshot(dataUrl).then(async (photoUrl) => {
+              if (photoUrl) {
+                const targetBranch = found.branch || branchName || 'Tambun 1';
+                try {
+                  await supabase.from('transactions').insert({
+                    total_amount: 0,
+                    payment_status: 'ATTENDANCE',
+                    payment_method: `ABSEN:${found.name}`,
+                    snapshot_url: photoUrl,
+                    branch_id: targetBranch
+                  });
+                } catch (dbErr) {
+                  console.error("Gagal simpan absensi ke Supabase:", dbErr);
+                }
+
+                // Broadcast ke tab/window lain secara instan
+                try {
+                  const channel = new BroadcastChannel('pos_demo_channel');
+                  channel.postMessage({
+                    type: 'ATTENDANCE',
+                    payload: {
+                      id: `ABS-${Math.floor(1000 + Math.random() * 9000)}`,
+                      cashier: found.name,
+                      branch: targetBranch,
+                      img: photoUrl,
+                      url: photoUrl,
+                      time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+                      date: new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
+                    }
+                  });
+                  channel.close();
+                } catch (bErr) {
+                  console.error("Broadcast attendance failed:", bErr);
+                }
+              }
+            }).catch(console.error);
           }
         }
       } catch (err) {
@@ -242,34 +324,77 @@ export default function KasirPage() {
     setAppState("pos");
   };
 
-  const handleCloseShift = (e: React.FormEvent) => {
+  const handleCloseShift = async (e: React.FormEvent) => {
     e.preventDefault();
     const systemEndingCash = startingCash + shiftStats.cash;
     const selisih = actualEndingCash - systemEndingCash;
-    
-    // --- Broadcast Shift Event for Demo ---
+    const branchTarget = branchName || "Tambun 1";
+    const cashierName = operator?.name || "Kasir Utama";
+    const shiftDateStr = new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) + " " + new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+    const shiftIdStr = `SH-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    const shiftReportData = {
+      id: shiftIdStr,
+      date: shiftDateStr,
+      cashier: cashierName,
+      branch: branchTarget,
+      modal: startingCash,
+      system: systemEndingCash,
+      physical: actualEndingCash,
+      selisih: selisih
+    };
+
+    // 1. Simpan ke Supabase agar tersinkronisasi lintas perangkat (cross-device)
+    try {
+      await supabase.from('transactions').insert({
+        total_amount: actualEndingCash,
+        payment_status: 'SHIFT_REPORT',
+        payment_method: JSON.stringify(shiftReportData),
+        branch_id: branchTarget
+      });
+
+      // Jika ada selisih uang fisik kurang dari sistem -> Catat sebagai FRAUD ALERT
+      if (selisih < 0) {
+        await supabase.from('transactions').insert({
+          total_amount: Math.abs(selisih),
+          payment_status: 'FRAUD_ALERT',
+          payment_method: JSON.stringify({
+            title: `Selisih Setoran Fisik Kurang: Rp ${Math.abs(selisih).toLocaleString('id-ID')}`,
+            cashier: cashierName,
+            branch: branchTarget,
+            time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+            selisih: selisih
+          }),
+          branch_id: branchTarget
+        });
+      }
+    } catch (dbErr) {
+      console.error("Gagal menyimpan shift ke Supabase:", dbErr);
+    }
+
+    // 2. Broadcast Shift Event for Demo
     try {
       const channel = new BroadcastChannel('pos_demo_channel');
       channel.postMessage({
         type: 'CLOSE_SHIFT',
         payload: {
-          shiftReport: {
-            id: `SH-${Math.floor(1000 + Math.random() * 9000)}`,
-            date: new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) + " " + new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
-            cashier: operator?.name || "Kasir Utama",
-            branch: "Tambun 1",
-            modal: startingCash,
-            system: systemEndingCash,
-            physical: actualEndingCash,
-            selisih: selisih
-          }
+          shiftReport: shiftReportData
         }
       });
+      if (selisih < 0) {
+        channel.postMessage({
+          type: 'FRAUD_ALERT',
+          payload: {
+            title: `Selisih Setoran Karyawan (Kurang Rp ${Math.abs(selisih).toLocaleString('id-ID')})`,
+            branch: branchTarget,
+            time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+          }
+        });
+      }
       channel.close();
     } catch (err) {
       console.error("Broadcast failed:", err);
     }
-    // ------------------------------------
 
     alert(`Shift Ditutup!\nTotal Transaksi: ${shiftStats.trxCount}\nTotal QRIS: Rp ${shiftStats.qris.toLocaleString('id-ID')}\nSistem Tunai: Rp ${systemEndingCash.toLocaleString('id-ID')}\nFisik Tunai: Rp ${actualEndingCash.toLocaleString('id-ID')}\nSelisih: Rp ${selisih.toLocaleString('id-ID')}`);
     
@@ -290,6 +415,7 @@ export default function KasirPage() {
       if (photoDataUrl) {
         snapshotUrl = await uploadSnapshot(photoDataUrl);
       }
+      setLastSnapshotUrl(snapshotUrl);
 
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
       if (supabaseUrl && supabaseUrl !== 'https://mock.supabase.co') {
@@ -299,7 +425,7 @@ export default function KasirPage() {
             total_amount: totalAmount,
             payment_status: 'PENDING',
             snapshot_url: snapshotUrl,
-            branch_id: 'd0e659b9-0c62-4015-ab1b-265de35bfcd1'
+            branch_id: branchName || 'Tambun 1'
           })
           .select()
           .single();
@@ -313,7 +439,8 @@ export default function KasirPage() {
             .update({
               device_status: 'ACTIVE',
               active_duration_seconds: iotDurationSeconds,
-              last_heartbeat: new Date().toISOString()
+              last_heartbeat: new Date().toISOString(),
+              updated_at: new Date().toISOString()
             })
             .eq('device_code', 'NITRO-01');
         }
@@ -367,24 +494,25 @@ export default function KasirPage() {
       }));
 
       // --- Broadcast Event for Realtime Demo to Owner Dashboard ---
+      const activeSnapUrl = lastSnapshotUrl || "https://res.cloudinary.com/y1dqh5nu/image/upload/v1791868734/u9ymxjvra7vqh4psuumu.jpg";
       try {
         const channel = new BroadcastChannel('pos_demo_channel');
         channel.postMessage({
           type: 'NEW_TRANSACTION',
           payload: {
-            id: `TRX-${Math.floor(1000 + Math.random() * 9000)}`,
+            id: pendingTrxId ? `TRX-${pendingTrxId.slice(0, 6)}` : `TRX-${Math.floor(1000 + Math.random() * 9000)}`,
             time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
-            branch: "Tambun 1", // Simulasi cabang yang aktif
+            branch: branchName || "Tambun 1",
             cashier: operator?.name || "Kasir Utama",
             amount: totalAmount,
-            // Simulasi random img placeholder or specific
             newSnap: {
-              id: `TRX-${Math.floor(1000 + Math.random() * 9000)}`,
+              id: pendingTrxId ? `TRX-${pendingTrxId.slice(0, 6)}` : `TRX-${Math.floor(1000 + Math.random() * 9000)}`,
               time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
-              branch: "Tambun 1",
+              branch: branchName || "Tambun 1",
               cashier: operator?.name || "Kasir Utama",
               amount: totalAmount,
-              img: "https://placehold.co/400x300/1e293b/ffffff?text=Snapshot\n+Baru"
+              img: activeSnapUrl,
+              url: activeSnapUrl
             }
           }
         });

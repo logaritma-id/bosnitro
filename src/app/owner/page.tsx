@@ -22,6 +22,7 @@ import {
   X
 } from "lucide-react";
 import { getProducts, saveProducts, getOperators, saveOperators, getBranches, saveBranches } from "../../lib/localDb";
+import { supabase } from "@/lib/supabase";
 
 // --- MOCK DATA ---
 const MOCK_BRANCHES = ["Semua Cabang", "Tambun 1", "Cikarang Baru", "Cibitung", "Babelan"];
@@ -43,8 +44,10 @@ export default function OwnerDashboard() {
   // Real-time State
   const [stats, setStats] = useState(INITIAL_STATS);
   const [snapshots, setSnapshots] = useState(INITIAL_SNAPSHOTS);
+  const [attendances, setAttendances] = useState<any[]>([]);
   const [branchStats, setBranchStats] = useState<any[]>([]);
   const [shifts, setShifts] = useState(INITIAL_SHIFTS);
+  const [fraudLogs, setFraudLogs] = useState<any[]>([]);
   const [showFraudAlert, setShowFraudAlert] = useState(false); // Default false, will be triggered by Kasir
 
   const [products, setProducts] = useState<any[]>([]);
@@ -55,14 +58,185 @@ export default function OwnerDashboard() {
   const [newOperator, setNewOperator] = useState<{id?: number, name: string, pin: string, branch: string}>({ name: '', pin: '', branch: '' });
   const [selectedBranchConfig, setSelectedBranchConfig] = useState<any>(null);
 
-  // Load from LocalDB on Mount
+  // Ambil data Transaksi, Absensi, Shift, dan Hardware IoT langsung dari Database Supabase
+  const loadDataFromSupabase = async () => {
+    try {
+      // 1. Ambil data Transaksi dari Supabase
+      const { data: trxList, error: trxErr } = await supabase
+        .from('transactions')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (trxList && !trxErr) {
+        // A. Filter Transaksi Penjualan yang COMPLETED
+        const sales = trxList.filter(t => t.payment_status === 'COMPLETED');
+        const totalOmzet = sales.reduce((sum, t) => sum + Number(t.total_amount || 0), 0);
+        const totalTrx = sales.length;
+        
+        setStats({
+          omzet: totalOmzet,
+          trx: totalTrx,
+          oliSold: Math.floor(totalTrx * 0.2),
+          profit: Math.round(totalOmzet * 0.8)
+        });
+
+        // B. CCTV Snapshots Feed dari transaksi yang memiliki snapshot_url
+        const snapFeed = sales
+          .filter(t => t.snapshot_url)
+          .map(t => {
+            const timeStr = new Date(t.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+            const branchNameStr = (t.branch_id === 'd0e659b9-0c62-4015-ab1b-265de35bfcd1' || !t.branch_id) ? 'Tambun 1' : t.branch_id;
+            return {
+              id: `TRX-${t.id.slice(0, 6)}`,
+              time: timeStr,
+              branch: branchNameStr,
+              cashier: 'Kasir',
+              amount: Number(t.total_amount),
+              img: t.snapshot_url,
+              url: t.snapshot_url
+            };
+          });
+        setSnapshots(snapFeed);
+
+        // C. Absensi Wajah Karyawan (payment_status: 'ATTENDANCE')
+        const attList = trxList
+          .filter(t => t.payment_status === 'ATTENDANCE')
+          .map(t => {
+            const cashierName = (t.payment_method || '').replace('ABSEN:', '') || 'Kasir';
+            const timeStr = new Date(t.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+            const dateStr = new Date(t.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+            const branchNameStr = (t.branch_id === 'd0e659b9-0c62-4015-ab1b-265de35bfcd1' || !t.branch_id) ? 'Tambun 1' : t.branch_id;
+            return {
+              id: `ABS-${t.id.slice(0, 6)}`,
+              cashier: cashierName,
+              branch: branchNameStr,
+              time: timeStr,
+              date: dateStr,
+              img: t.snapshot_url,
+              url: t.snapshot_url
+            };
+          });
+        setAttendances(attList);
+
+        // D. Laporan Tutup Shift (payment_status: 'SHIFT_REPORT')
+        const shiftList = trxList
+          .filter(t => t.payment_status === 'SHIFT_REPORT')
+          .map(t => {
+            try {
+              const parsed = JSON.parse(t.payment_method);
+              return {
+                id: parsed.id || `SH-${t.id.slice(0, 6)}`,
+                date: parsed.date || new Date(t.created_at).toLocaleTimeString('id-ID'),
+                cashier: parsed.cashier || 'Kasir',
+                branch: parsed.branch || t.branch_id || 'Tambun 1',
+                modal: parsed.modal || 0,
+                system: parsed.system || 0,
+                physical: parsed.physical || Number(t.total_amount),
+                selisih: parsed.selisih || 0
+              };
+            } catch {
+              return null;
+            }
+          })
+          .filter(Boolean);
+        if (shiftList.length > 0) {
+          setShifts(shiftList);
+        }
+
+        // E. Fraud Alert Logs (payment_status: 'FRAUD_ALERT')
+        const alertList = trxList
+          .filter(t => t.payment_status === 'FRAUD_ALERT')
+          .map(t => {
+            try {
+              const parsed = JSON.parse(t.payment_method);
+              return {
+                title: parsed.title || 'Peringatan Selisih Kasir',
+                branch: parsed.branch || t.branch_id || 'Tambun 1',
+                time: parsed.time || new Date(t.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+              };
+            } catch {
+              return {
+                title: t.payment_method || 'Peringatan Anomali',
+                branch: t.branch_id || 'Tambun 1',
+                time: new Date(t.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+              };
+            }
+          });
+        if (alertList.length > 0) {
+          setFraudLogs(alertList);
+          setShowFraudAlert(true);
+        }
+      }
+
+      // 2. Ambil Status Real Perangkat IoT dari Supabase branch_devices
+      const { data: devices, error: devErr } = await supabase
+        .from('branch_devices')
+        .select('*');
+
+      if (devices && !devErr) {
+        const nitroDevice = devices.find(d => d.device_code === 'NITRO-01');
+        let isNitroOnline = false;
+        let lastActiveStr = "";
+
+        if (nitroDevice) {
+          const lastTime = new Date(nitroDevice.updated_at || nitroDevice.last_heartbeat).getTime();
+          const diffSec = (Date.now() - lastTime) / 1000;
+          isNitroOnline = diffSec < 120; // 2 menit
+          lastActiveStr = new Date(nitroDevice.updated_at || nitroDevice.last_heartbeat).toLocaleString('id-ID');
+        }
+
+        setBranchStats(prev => prev.map(b => {
+          if (b.name === 'Tambun 1') {
+            return {
+              ...b,
+              status: isNitroOnline ? 'Online' : 'Offline',
+              lastActive: lastActiveStr,
+              deviceStatus: nitroDevice?.device_status || 'IDLE'
+            };
+          }
+          return b;
+        }));
+      }
+    } catch (err) {
+      console.error("Gagal memuat data dari Supabase:", err);
+    }
+  };
+
+  // Load from LocalDB on Mount & Supabase Live Sync
   useEffect(() => {
     setProducts(getProducts());
     setOperators(getOperators());
     setBranchStats(getBranches());
+    
+    // Load data Supabase saat awal mount
+    loadDataFromSupabase();
+
+    // Auto-refresh berkala setiap 6 detik
+    const pollInterval = setInterval(loadDataFromSupabase, 6000);
+
+    // Supabase Realtime Channels
+    const subTransactions = supabase
+      .channel('owner_transactions_live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => {
+        loadDataFromSupabase();
+      })
+      .subscribe();
+
+    const subDevices = supabase
+      .channel('owner_devices_live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'branch_devices' }, () => {
+        loadDataFromSupabase();
+      })
+      .subscribe();
+
+    return () => {
+      clearInterval(pollInterval);
+      supabase.removeChannel(subTransactions);
+      supabase.removeChannel(subDevices);
+    };
   }, []);
 
-  // BroadcastChannel Listener for Realtime Demo
+  // BroadcastChannel Listener for Realtime Demo (Same Browser Instant Sync)
   useEffect(() => {
     if (typeof window === "undefined") return;
     const channel = new BroadcastChannel('pos_demo_channel');
@@ -87,11 +261,17 @@ export default function OwnerDashboard() {
         setBranchStats(prev => prev.map(b => 
           b.name === branch ? { ...b, omzet: b.omzet + amount, trx: b.trx + 1 } : b
         ));
+      } else if (event.data.type === 'ATTENDANCE') {
+        const newAtt = event.data.payload;
+        setAttendances(prev => [newAtt, ...prev]);
       } else if (event.data.type === 'CLOSE_SHIFT') {
         const { shiftReport } = event.data.payload;
         setShifts(prev => [shiftReport, ...prev]);
       } else if (event.data.type === 'FRAUD_ALERT') {
         setShowFraudAlert(true);
+        if (event.data.payload) {
+          setFraudLogs(prev => [event.data.payload, ...prev]);
+        }
       } else if (event.data.type === 'DB_UPDATE') {
         if (event.data.payload.entity === 'products') setProducts(getProducts());
         if (event.data.payload.entity === 'operators') setOperators(getOperators());
@@ -259,13 +439,14 @@ export default function OwnerDashboard() {
                 <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col h-80">
                   <div className="flex justify-between items-center mb-4">
                      <h3 className="font-bold text-gray-800 flex items-center"><Camera size={18} className="mr-2 text-blue-900" /> Live Fraud & Audit Stream</h3>
-                     <a href="#" className="text-blue-600 text-xs font-bold hover:underline">Lihat Semua</a>
+                     <button onClick={() => setActiveTab("audit")} className="text-blue-600 text-xs font-bold hover:underline">Lihat Semua</button>
                   </div>
                   <div className="flex-1 overflow-x-auto overflow-y-hidden flex space-x-3 pb-2">
-                     {snapshots.slice(0, 3).map((snap, idx) => (
-                        <div key={idx} className="w-32 shrink-0 flex flex-col">
-                           <div className="w-full h-24 bg-gray-100 rounded-lg overflow-hidden mb-2">
-                              <img src={snap.url} alt="Snap" className="w-full h-full object-cover" />
+                     {snapshots.slice(0, 5).map((snap, idx) => (
+                        <div key={idx} onClick={() => setSelectedSnapshot(snap.img || snap.url)} className="w-32 shrink-0 flex flex-col cursor-pointer group">
+                           <div className="w-full h-24 bg-gray-100 rounded-lg overflow-hidden mb-2 relative">
+                              <img src={snap.img || snap.url} alt="Snap" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                              <div className="absolute top-1 right-1 bg-black/60 text-[9px] text-white px-1 rounded">CCTV</div>
                            </div>
                            <p className="text-xs font-bold text-blue-800 leading-tight line-clamp-2">{snap.branch} - Trx</p>
                            <p className="text-[10px] text-gray-500 mt-1">{snap.time}</p>
@@ -281,15 +462,15 @@ export default function OwnerDashboard() {
                 <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 flex flex-col h-80">
                   <div className="flex justify-between items-center mb-4">
                      <h3 className="font-bold text-gray-800">Telegram Fraud Alert Log</h3>
-                     <a href="#" className="text-blue-600 text-xs font-bold hover:underline">Lihat Semua</a>
+                     <button onClick={() => setActiveTab("audit")} className="text-blue-600 text-xs font-bold hover:underline">Lihat Semua</button>
                   </div>
                   <div className="flex-1 overflow-y-auto pr-2 space-y-3">
-                     {[
+                     {(fraudLogs.length > 0 ? fraudLogs : [
                         { title: "Potensi Fraud - Kompresor Aktif", branch: "Cabang Cibitung 1", time: "10:42" },
                         { title: "Pengisian Tanpa Transaksi POS", branch: "Cabang Tambun 1", time: "09:37" },
                         { title: "Selisih Setoran Karyawan", branch: "Cabang Cibitung 3", time: "08:21" },
                         { title: "Kompresor Aktif di Luar Jam", branch: "Cabang Cibitung 2", time: "02:15" },
-                     ].map((alert, i) => (
+                     ]).map((alert, i) => (
                         <div key={i} className="flex items-start space-x-3 p-3 bg-red-50/50 rounded-lg border border-red-50">
                            <AlertCircle size={16} className="text-red-500 mt-0.5 shrink-0" />
                            <div>
@@ -341,10 +522,10 @@ export default function OwnerDashboard() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
                 {snapshots.map((snap, i) => (
-                  <div key={i} onClick={() => setSelectedSnapshot(snap.img)} className="bg-white rounded-2xl overflow-hidden border border-gray-200 shadow-sm hover:shadow-lg transition-all group cursor-pointer">
+                  <div key={i} onClick={() => setSelectedSnapshot(snap.img || snap.url)} className="bg-white rounded-2xl overflow-hidden border border-gray-200 shadow-sm hover:shadow-lg transition-all group cursor-pointer">
                     <div className="relative aspect-video bg-gray-900 overflow-hidden">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={snap.img} alt="CCTV" className="object-cover w-full h-full opacity-80 group-hover:scale-105 transition-transform duration-500" />
+                      <img src={snap.img || snap.url} alt="CCTV" className="object-cover w-full h-full opacity-80 group-hover:scale-105 transition-transform duration-500" />
                       <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm px-2 py-1 rounded text-xs font-bold text-white flex items-center">
                         <Camera size={12} className="mr-1 text-red-400" /> Bukti CCTV
                       </div>
@@ -364,6 +545,11 @@ export default function OwnerDashboard() {
                     </div>
                   </div>
                 ))}
+                {snapshots.length === 0 && (
+                  <div className="col-span-full py-16 text-center text-gray-400 font-medium">
+                    Belum ada bukti rekaman CCTV dari transaksi kasir.
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -436,10 +622,61 @@ export default function OwnerDashboard() {
           {/* TAB 4: KARYAWAN & SHIFT */}
           {activeTab === "karyawan" && (
             <div className="space-y-6">
+              {/* LOG ABSENSI MASUK KARYAWAN */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="p-5 border-b bg-gray-50/50 flex justify-between items-center">
+                  <div className="flex items-center space-x-2">
+                    <Camera size={18} className="text-blue-600" />
+                    <h3 className="font-bold text-gray-800">Log Absensi Wajah Kasir (Face Attendance)</h3>
+                  </div>
+                  <span className="text-xs bg-blue-100 text-blue-800 font-bold px-2.5 py-1 rounded-full">
+                    {attendances.length} Catatan Absen
+                  </span>
+                </div>
+                <div className="p-4">
+                  {attendances.length === 0 ? (
+                    <div className="text-center py-8 text-gray-400 font-medium text-sm">
+                      Belum ada rekaman foto absensi masuk kasir hari ini.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                      {attendances.map((att, i) => (
+                        <div 
+                          key={att.id || i} 
+                          onClick={() => setSelectedSnapshot(att.img || att.url)}
+                          className="bg-gray-50 border border-gray-200 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all cursor-pointer group"
+                        >
+                          <div className="aspect-square bg-gray-200 relative overflow-hidden">
+                            <img 
+                              src={att.img || att.url} 
+                              alt={att.cashier} 
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
+                            />
+                            <div className="absolute bottom-1 right-1 bg-black/60 text-white text-[9px] px-1.5 py-0.5 rounded font-mono">
+                              {att.time}
+                            </div>
+                          </div>
+                          <div className="p-2.5">
+                            <p className="font-bold text-gray-800 text-xs truncate">{att.cashier}</p>
+                            <p className="text-[10px] text-gray-500 flex items-center mt-0.5">
+                              <Building2 size={10} className="mr-1 shrink-0" />
+                              <span className="truncate">{att.branch}</span>
+                            </p>
+                            <p className="text-[10px] text-emerald-600 font-semibold mt-1 flex items-center">
+                              <CheckCircle size={10} className="mr-1" /> Hadir
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {/* KASIR SETTINGS */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-              <div className="p-5 border-b bg-gray-50/50 flex justify-between items-center">
-                <h3 className="font-bold text-gray-800">Manajemen Akses Kasir</h3>
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="p-5 border-b bg-gray-50/50 flex justify-between items-center">
+                  <h3 className="font-bold text-gray-800">Manajemen Akses Kasir</h3>
                 <button 
                   onClick={() => {
                     setNewOperator({ name: '', pin: '', branch: branchStats.length > 0 ? branchStats[0].name : '' });
@@ -581,8 +818,13 @@ export default function OwnerDashboard() {
                          </td>
                          <td className="p-4">
                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${branch.status === 'Online' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                             {branch.status}
+                            ● {branch.status}
                            </span>
+                            {branch.lastActive && (
+                              <div className="text-[10px] text-gray-500 font-medium mt-1">
+                                Heartbeat: {branch.lastActive}
+                              </div>
+                            )}
                          </td>
                          <td className="p-4 font-mono text-sm text-gray-500">192.168.1.{100 + i}</td>
                          <td className="p-4 text-right">
