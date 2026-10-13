@@ -20,7 +20,9 @@ import {
   CheckCircle,
   Settings,
   X,
-  Send
+  Send,
+  Trash2,
+  Download
 } from "lucide-react";
 import { getProducts, saveProducts, getOperators, saveOperators, getBranches, saveBranches } from "../../lib/localDb";
 import { supabase } from "@/lib/supabase";
@@ -275,7 +277,8 @@ export default function OwnerDashboard() {
         const dateStr = new Date(t.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
         const branchNameStr = (t.branch_id === 'd0e659b9-0c62-4015-ab1b-265de35bfcd1' || !t.branch_id) ? 'Tambun 1' : t.branch_id;
         return {
-          id: `ABS-${t.id.slice(0, 6)}`,
+          id: `ABS-${String(t.id).slice(0, 6)}`,
+          rawId: t.id,
           cashier: cashierName,
           branch: branchNameStr,
           time: timeStr,
@@ -509,6 +512,79 @@ export default function OwnerDashboard() {
         const bName = (t.branch_id === 'd0e659b9-0c62-4015-ab1b-265de35bfcd1' || !t.branch_id) ? 'Tambun 1' : t.branch_id;
         return bName.toLowerCase() === selectedBranch.toLowerCase();
       });
+
+  // Handler untuk menghapus satu catatan absensi
+  const handleDeleteAttendance = async (att: any) => {
+    if (!confirm(`Hapus rekaman absensi ${att.cashier} (${att.time} di ${att.branch})?\nTindakan ini akan menghapus data foto dan status absensi.`)) return;
+    try {
+      const targetId = att.rawId || att.id;
+      if (targetId && !String(targetId).startsWith('att-')) {
+        const { error } = await supabase
+          .from('transactions')
+          .delete()
+          .eq('id', targetId);
+        if (error) console.warn("Supabase delete warning:", error);
+      }
+      setRawTransactions(prev => prev.filter(t => t.id !== targetId && t.id !== att.rawId));
+      setAttendances(prev => prev.filter(a => (a.rawId || a.id) !== targetId));
+      alert("✅ Catatan absensi berhasil dihapus!");
+    } catch (err: any) {
+      alert("Gagal menghapus absensi: " + (err?.message || "Error"));
+    }
+  };
+
+  // Handler untuk membersihkan semua riwayat absensi periode/cabang saat ini
+  const handleClearAllAttendances = async () => {
+    if (displayedAttendances.length === 0) {
+      alert("Tidak ada catatan absensi yang dapat dihapus.");
+      return;
+    }
+    const msg = selectedBranch === "Semua Cabang"
+      ? `Hapus SEMUA (${displayedAttendances.length}) riwayat absensi pada periode ini?`
+      : `Hapus semua (${displayedAttendances.length}) riwayat absensi untuk cabang ${selectedBranch}?`;
+    if (!confirm(msg + "\nTindakan ini tidak dapat dibatalkan.")) return;
+
+    try {
+      const idsToDelete = displayedAttendances.map(a => a.rawId || a.id);
+      for (const id of idsToDelete) {
+        if (!String(id).startsWith('att-')) {
+          await supabase.from('transactions').delete().eq('id', id);
+        }
+      }
+      setRawTransactions(prev => prev.filter(t => !idsToDelete.includes(t.id)));
+      setAttendances(prev => prev.filter(a => !idsToDelete.includes(a.rawId || a.id)));
+      alert("✅ Seluruh riwayat absensi berhasil dibersihkan!");
+    } catch (err: any) {
+      alert("Gagal membersihkan absensi: " + (err?.message || "Error"));
+    }
+  };
+
+  // Handler export shift ke format CSV / Excel
+  const handleExportShiftExcel = () => {
+    if (displayedShifts.length === 0) {
+      alert("Tidak ada data shift untuk diekspor pada periode ini.");
+      return;
+    }
+    const headers = ["ID Shift", "Waktu", "Cabang", "Kasir", "Modal Awal", "Omzet Sistem", "Setoran Fisik", "Selisih"];
+    const rows = displayedShifts.map((s: any) => [
+      s.id,
+      `"${s.date}"`,
+      `"${s.branch}"`,
+      `"${s.cashier}"`,
+      s.modal,
+      s.system,
+      s.physical,
+      s.selisih
+    ]);
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((e: any) => e.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Laporan_Shift_${selectedBranch.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const filteredAuditSnapshots = displayedSnapshots.filter(s => 
     !auditSearch || 
@@ -1047,18 +1123,30 @@ export default function OwnerDashboard() {
             <div className="space-y-6">
               {/* LOG ABSENSI MASUK KARYAWAN */}
               <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                <div className="p-5 border-b bg-gray-50/50 flex justify-between items-center">
+                <div className="p-5 border-b bg-gray-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                   <div className="flex items-center space-x-2">
                     <Camera size={18} className="text-blue-600" />
                     <h3 className="font-bold text-gray-800">Log Absensi Wajah Kasir (Face Attendance)</h3>
                   </div>
-                  <span className="text-xs bg-blue-100 text-blue-800 font-bold px-2.5 py-1 rounded-full">
-                    {displayedAttendances.length} Catatan Absen
-                  </span>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xs bg-blue-100 text-blue-800 font-bold px-2.5 py-1 rounded-full">
+                      {displayedAttendances.length} Catatan Absen
+                    </span>
+                    {displayedAttendances.length > 0 && (
+                      <button 
+                        onClick={handleClearAllAttendances}
+                        className="px-3 py-1 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-lg text-xs font-bold transition-all flex items-center space-x-1"
+                        title="Hapus semua riwayat absensi periode ini"
+                      >
+                        <Trash2 size={12} />
+                        <span>Hapus Semua</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="p-4">
                   {displayedAttendances.length === 0 ? (
-                    <div className="text-center py-8 text-gray-400 font-medium text-sm">
+                    <div className="text-center py-8 text-gray-600 font-bold text-sm">
                       Belum ada rekaman foto absensi masuk kasir hari ini.
                     </div>
                   ) : (
@@ -1067,7 +1155,7 @@ export default function OwnerDashboard() {
                         <div 
                           key={att.id || i} 
                           onClick={() => setSelectedSnapshot(att.img || att.url)}
-                          className="bg-gray-50 border border-gray-200 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all cursor-pointer group"
+                          className="bg-white border-2 border-gray-200 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all cursor-pointer group relative flex flex-col justify-between"
                         >
                           <div className="aspect-square bg-gray-200 relative overflow-hidden">
                             <img 
@@ -1075,19 +1163,43 @@ export default function OwnerDashboard() {
                               alt={att.cashier} 
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
                             />
-                            <div className="absolute bottom-1 right-1 bg-black/60 text-white text-[9px] px-1.5 py-0.5 rounded font-mono">
+                            <div className="absolute bottom-1 right-1 bg-black/70 text-white text-[9px] px-1.5 py-0.5 rounded font-mono font-bold">
                               {att.time}
                             </div>
+                            {/* Tombol Hapus Pojok Foto */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteAttendance(att);
+                              }}
+                              title="Hapus catatan absen ini"
+                              className="absolute top-1.5 right-1.5 p-1.5 bg-red-600/90 hover:bg-red-700 text-white rounded-lg shadow-md transition-all sm:opacity-0 group-hover:opacity-100"
+                            >
+                              <Trash2 size={13} />
+                            </button>
                           </div>
-                          <div className="p-2.5">
-                            <p className="font-bold text-gray-800 text-xs truncate">{att.cashier}</p>
-                            <p className="text-xs text-gray-700 font-medium flex items-center mt-0.5">
-                              <Building2 size={10} className="mr-1 shrink-0" />
-                              <span className="truncate">{att.branch}</span>
-                            </p>
-                            <p className="text-[10px] text-emerald-600 font-semibold mt-1 flex items-center">
-                              <CheckCircle size={10} className="mr-1" /> Hadir
-                            </p>
+                          <div className="p-2.5 bg-gray-50/50 flex-1 flex flex-col justify-between">
+                            <div>
+                              <p className="font-bold text-gray-900 text-xs truncate">{att.cashier}</p>
+                              <p className="text-xs text-gray-700 font-medium flex items-center mt-0.5">
+                                <Building2 size={10} className="mr-1 shrink-0" />
+                                <span className="truncate">{att.branch}</span>
+                              </p>
+                            </div>
+                            <div className="flex justify-between items-center mt-2 pt-1 border-t border-gray-200/60">
+                              <p className="text-[10px] text-emerald-700 font-bold flex items-center">
+                                <CheckCircle size={10} className="mr-1 text-emerald-600" /> Hadir
+                              </p>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteAttendance(att);
+                                }}
+                                className="text-[11px] font-bold text-red-600 hover:text-red-800 hover:underline flex items-center space-x-0.5"
+                              >
+                                <span>Hapus</span>
+                              </button>
+                            </div>
                           </div>
                         </div>
                       ))}
@@ -1130,18 +1242,31 @@ export default function OwnerDashboard() {
                         <td className="p-4 font-mono text-gray-700 font-bold">{op.pin}</td>
                         <td className="p-4 font-semibold text-gray-600">{op.branch}</td>
                         <td className="p-4 text-right">
-                          <button 
-                            onClick={() => {
-                              if (confirm(`Hapus akses kasir ${op.name}?`)) {
-                                const newOps = operators.filter(o => o.id !== op.id);
-                                setOperators(newOps);
-                                saveOperators(newOps);
-                              }
-                            }}
-                            className="text-red-600 font-bold text-sm hover:text-red-800"
-                          >
-                            Cabut Akses
-                          </button>
+                          <div className="flex justify-end items-center space-x-2">
+                            <button
+                              onClick={() => {
+                                setNewOperator({ ...op });
+                                setShowOperatorModal(true);
+                              }}
+                              className="text-blue-600 font-bold text-sm hover:text-blue-800"
+                            >
+                              Edit PIN
+                            </button>
+                            <span className="text-gray-300">|</span>
+                            <button 
+                              onClick={() => {
+                                if (confirm(`Hapus akses kasir ${op.name}?`)) {
+                                  const newOps = operators.filter(o => o.id !== op.id);
+                                  setOperators(newOps);
+                                  saveOperators(newOps);
+                                  alert(`Akses kasir ${op.name} berhasil dicabut!`);
+                                }
+                              }}
+                              className="text-red-600 font-bold text-sm hover:text-red-800"
+                            >
+                              Cabut Akses
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -1154,7 +1279,7 @@ export default function OwnerDashboard() {
             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mt-6">
               <div className="p-5 border-b bg-gray-50/50 flex justify-between items-center">
                 <h3 className="font-bold text-gray-800">Log Discrepancy & Blind Closing</h3>
-                <button className="px-4 py-2 bg-white border text-gray-700 rounded-lg text-sm font-bold shadow-sm hover:bg-gray-50 transition-all">Download Excel</button>
+                <button onClick={handleExportShiftExcel} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold shadow-sm hover:bg-emerald-700 transition-all flex items-center space-x-1.5"><Download size={14} /><span>Download Excel</span></button>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse whitespace-nowrap">
@@ -1177,7 +1302,7 @@ export default function OwnerDashboard() {
                         </td>
                       </tr>
                     ) : (
-                      shifts.map((shift, i) => (
+                      displayedShifts.map((shift, i) => (
                         <tr key={shift.id || i} className="hover:bg-slate-50 transition-colors">
                           <td className="p-4 font-bold text-gray-900">{shift.id}</td>
                           <td className="p-4">
@@ -1575,39 +1700,46 @@ export default function OwnerDashboard() {
       )}
 
 
-      {/* Add Operator Modal */}
+      {/* Add / Edit Operator Modal */}
       {showOperatorModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
-            <h3 className="font-bold text-lg mb-4 text-gray-800">Tambah Kasir Baru</h3>
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 border border-gray-200 text-gray-900">
+            <h3 className="font-extrabold text-xl mb-4 text-gray-900">{newOperator.id ? 'Edit Akses Kasir' : 'Tambah Kasir Baru'}</h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">Nama Lengkap</label>
-                <input type="text" className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900" value={newOperator.name} onChange={e => setNewOperator({...newOperator, name: e.target.value})} placeholder="Misal: Budi Santoso" />
+                <label className="block text-sm font-bold text-gray-800 mb-1">Nama Lengkap</label>
+                <input type="text" className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900 bg-white" value={newOperator.name} onChange={e => setNewOperator({...newOperator, name: e.target.value})} placeholder="Misal: Budi Santoso" />
               </div>
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">PIN Akses (4-6 digit)</label>
-                <input type="text" className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-mono font-bold text-gray-900" value={newOperator.pin} onChange={e => setNewOperator({...newOperator, pin: e.target.value.replace(/\D/g, '')})} placeholder="1234" maxLength={6} />
+                <label className="block text-sm font-bold text-gray-800 mb-1">PIN Akses (4-6 digit)</label>
+                <input type="text" className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-mono font-bold text-gray-900 bg-white" value={newOperator.pin} onChange={e => setNewOperator({...newOperator, pin: e.target.value.replace(/\D/g, '')})} placeholder="1234" maxLength={6} />
               </div>
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">Cabang Penempatan</label>
+                <label className="block text-sm font-bold text-gray-800 mb-1">Cabang Penempatan</label>
                 <select className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:border-blue-500 font-bold text-gray-900 bg-white" value={newOperator.branch} onChange={e => setNewOperator({...newOperator, branch: e.target.value})}>
                   {branchStats.map(b => <option key={b.name} value={b.name}>{b.name}</option>)}
                 </select>
               </div>
             </div>
             <div className="mt-6 flex justify-end space-x-3">
-              <button onClick={() => setShowOperatorModal(false)} className="px-4 py-2 font-bold text-gray-600 hover:bg-gray-100 rounded-lg">Batal</button>
+              <button onClick={() => { setShowOperatorModal(false); setNewOperator({ name: '', pin: '', branch: '' }); }} className="px-4 py-2 font-bold text-gray-700 hover:bg-gray-100 rounded-lg">Batal</button>
               <button onClick={() => {
                 if (!newOperator.name || !newOperator.pin || !newOperator.branch) {
                   alert("Harap lengkapi semua data!");
                   return;
                 }
-                const newOps = [...operators, { ...newOperator, id: Date.now() }];
+                let newOps;
+                if (newOperator.id) {
+                  newOps = operators.map(o => o.id === newOperator.id ? { ...newOperator } : o);
+                  alert(`Akses kasir ${newOperator.name} berhasil diperbarui!`);
+                } else {
+                  newOps = [...operators, { ...newOperator, id: Date.now() }];
+                  alert(`Kasir ${newOperator.name} berhasil ditambahkan!`);
+                }
                 setOperators(newOps);
                 saveOperators(newOps);
-                alert("Kasir berhasil ditambahkan!");
                 setShowOperatorModal(false);
+                setNewOperator({ name: '', pin: '', branch: '' });
               }} className="px-4 py-2 font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-lg shadow">Simpan Karyawan</button>
             </div>
           </div>
