@@ -422,9 +422,6 @@ export default function OwnerDashboard() {
     const baselineAlerts = getInitialFraudLogs().filter(f => isWithinPeriod(f.createdAt, selectedPeriod));
     const combinedAlerts = [...dbAlerts, ...baselineAlerts];
     setFraudLogs(combinedAlerts);
-    if (combinedAlerts.length > 0) {
-      setShowFraudAlert(true);
-    }
   }, [rawTransactions, selectedPeriod, selectedBranch]);
 
   // Load from LocalDB on Mount & Supabase Live Sync
