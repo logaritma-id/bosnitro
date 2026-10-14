@@ -1205,8 +1205,8 @@ export default function KasirPage() {
 
       {/* Secure Post-Paid Workflow: Layar Pengerjaan & Pembayaran */}
       {checkoutStep === "payment" && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-[2rem] p-6 md:p-8 w-full max-w-md shadow-2xl flex flex-col items-center space-y-5 animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-3 sm:p-4 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white rounded-[2rem] p-6 md:p-8 w-full max-w-md max-h-[92vh] overflow-y-auto my-auto shadow-2xl flex flex-col items-center space-y-5 animate-in zoom-in-95 duration-200">
             
             <div className="flex flex-col items-center text-center space-y-1 mb-2">
               <div className="w-16 h-16 rounded-full flex items-center justify-center shadow-inner border-4 bg-green-50 text-green-600 border-green-100 mb-2">
