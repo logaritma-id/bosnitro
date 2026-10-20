@@ -280,7 +280,13 @@ export default function KasirPage() {
   const capturePhoto = async (): Promise<string | null> => {
     try {
       setCameraStatus("Loading");
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+      const getStreamWithTimeout = (): Promise<MediaStream> => {
+        return Promise.race([
+          navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } }),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Camera timeout")), 1500))
+        ]);
+      };
+      const stream = await getStreamWithTimeout();
       
       return new Promise((resolve) => {
         const video = document.createElement("video");
@@ -326,8 +332,8 @@ export default function KasirPage() {
         });
       });
     } catch (err) {
-      console.log("Kamera gagal diakses:", err);
-      setCameraStatus("Error");
+      console.log("Kamera gagal diakses atau timeout:", err);
+      setCameraStatus("Ready");
       return null;
     }
   };
