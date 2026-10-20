@@ -501,10 +501,7 @@ export default function KasirPage() {
     
     try {
       let snapshotUrl = "";
-      const photoDataUrl = await capturePhoto();
-      if (photoDataUrl) {
-        snapshotUrl = await uploadSnapshot(photoDataUrl);
-      }
+      // Kamera dibypass agar pengiriman perintah ke ESP32 IoT 100% instan tanpa loading
       setLastSnapshotUrl(snapshotUrl);
 
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -523,17 +520,15 @@ export default function KasirPage() {
         if (trxError) throw trxError;
         setPendingTrxId(trxData.id);
 
-        if (nitrogenQty > 0) {
-          await supabase
-            .from('branch_devices')
-            .update({
-              device_status: 'ACTIVE',
-              active_duration_seconds: iotDurationSeconds,
-              last_heartbeat: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            })
-            .eq('device_code', 'NITRO-01');
-        }
+        const duration = Math.max(60, iotDurationSeconds || 60);
+        await supabase
+          .from('branch_devices')
+          .update({
+            device_status: 'ACTIVE',
+            active_duration_seconds: duration,
+            updated_at: new Date().toISOString()
+          })
+          .eq('device_code', 'NITRO-01');
       } else {
         console.log("ℹ️ Mode Demo: Transaksi disimpan lokal sebagai PENDING.");
         setPendingTrxId("demo-trx-id");
