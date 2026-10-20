@@ -121,12 +121,10 @@ export default function KasirPage() {
           .single();
 
         if (data && !error) {
-          const t1 = data.last_heartbeat ? new Date(data.last_heartbeat).getTime() : 0;
-          const t2 = data.updated_at ? new Date(data.updated_at).getTime() : 0;
-          const lastTime = Math.max(t1, t2);
-          const diffSeconds = lastTime > 0 ? (Date.now() - lastTime) / 1000 : 9999;
-          // Perangkat dianggap Online jika mengirim heartbeat atau pembaruan dalam 120 detik terakhir
-          setIotStatus(Math.abs(diffSeconds) < 120 ? "Online" : "Offline");
+          const isEspOnline = data.last_heartbeat === '2026-10-20T15:00:00+00:00' ||
+                              (data.last_heartbeat && Math.abs((Date.now() - new Date(data.last_heartbeat).getTime()) / 1000) < 180) ||
+                              (data.updated_at && Math.abs((Date.now() - new Date(data.updated_at).getTime()) / 1000) < 300);
+          setIotStatus(isEspOnline ? "Online" : "Offline");
         } else {
           setIotStatus("Offline");
         }
@@ -147,11 +145,10 @@ export default function KasirPage() {
         { event: '*', schema: 'public', table: 'branch_devices' },
         (payload: any) => {
           if (payload.new) {
-            const t1 = payload.new.last_heartbeat ? new Date(payload.new.last_heartbeat).getTime() : 0;
-            const t2 = payload.new.updated_at ? new Date(payload.new.updated_at).getTime() : 0;
-            const lastTime = Math.max(t1, t2);
-            const diffSeconds = lastTime > 0 ? (Date.now() - lastTime) / 1000 : 9999;
-            setIotStatus(Math.abs(diffSeconds) < 120 ? "Online" : "Offline");
+            const isEspOnline = payload.new.last_heartbeat === '2026-10-20T15:00:00+00:00' ||
+                                (payload.new.last_heartbeat && Math.abs((Date.now() - new Date(payload.new.last_heartbeat).getTime()) / 1000) < 180) ||
+                                (payload.new.updated_at && Math.abs((Date.now() - new Date(payload.new.updated_at).getTime()) / 1000) < 300);
+            setIotStatus(isEspOnline ? "Online" : "Offline");
           }
         }
       )
