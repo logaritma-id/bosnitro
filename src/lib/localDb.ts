@@ -1,9 +1,7 @@
+import { supabase } from "./supabase";
+
 export const DEFAULT_OPERATORS = [
-  { id: 1, name: "Budi Santoso", pin: "1234", branch: "Tambun 1", role: "Operator", baseCommissionRate: 5 },
-  { id: 2, name: "Siti Aminah", pin: "5678", branch: "Tambun 1", role: "Operator", baseCommissionRate: 5 },
-  { id: 3, name: "Hendro Wibowo (SPV)", pin: "9988", branch: "Tambun 1", role: "Supervisor", baseCommissionRate: 3 },
-  { id: 4, name: "Rian Pratama", pin: "2468", branch: "Tambun 2", role: "Operator", baseCommissionRate: 5 },
-  { id: 5, name: "Agus Santoso (SPV)", pin: "1357", branch: "Tambun 2", role: "Supervisor", baseCommissionRate: 3 }
+  { id: 1, name: "Baim", pin: "1234", branch: "Graha Prima", role: "Operator", baseCommissionRate: 5 }
 ];
 
 export const DEFAULT_PRODUCTS = [
@@ -45,9 +43,26 @@ export function saveOperators(operators: any[]) {
   if (typeof window === "undefined") return;
   localStorage.setItem("pos_operators", JSON.stringify(operators));
   // Broadcast update
-  const channel = new BroadcastChannel('pos_demo_channel');
-  channel.postMessage({ type: 'DB_UPDATE', payload: { entity: 'operators' } });
-  channel.close();
+  try {
+    const channel = new BroadcastChannel('pos_demo_channel');
+    channel.postMessage({ type: 'DB_UPDATE', payload: { entity: 'operators' } });
+    channel.close();
+  } catch {}
+
+  // Sync ke Supabase agar semua tablet/browser kasir mendapatkan data terbaru secara instan
+  (async () => {
+    try {
+      await supabase.from('transactions').insert({
+        total_amount: 0,
+        payment_status: 'SYSTEM_CONFIG_OPERATORS',
+        payment_method: 'OPERATORS',
+        snapshot_url: JSON.stringify(operators),
+        branch_id: 'SYSTEM'
+      });
+    } catch (err) {
+      console.error("Cloud sync operators failed:", err);
+    }
+  })();
 }
 
 export function getProducts() {
@@ -78,10 +93,10 @@ export function saveProducts(products: any[]) {
 }
 
 export const DEFAULT_BRANCHES = [
-  { name: "Tambun 1", status: "Online", omzet: 0, trx: 0 },
-  { name: "Tambun 2", status: "Online", omzet: 0, trx: 0 },
-  { name: "Cibitung 1", status: "Offline", omzet: 0, trx: 0 },
-  { name: "Cibitung 2", status: "Online", omzet: 0, trx: 0 },
+  { name: "Graha Prima", status: "Online", omzet: 0, trx: 0 },
+  { name: "Regency", status: "Online", omzet: 0, trx: 0 },
+  { name: "Graha Melasty", status: "Online", omzet: 0, trx: 0 },
+  { name: "Buwek", status: "Online", omzet: 0, trx: 0 },
 ];
 
 export function getBranches() {
@@ -94,9 +109,26 @@ export function saveBranches(branches: any[]) {
   if (typeof window === "undefined") return;
   localStorage.setItem("pos_branches", JSON.stringify(branches));
   // Broadcast update
-  const channel = new BroadcastChannel('pos_demo_channel');
-  channel.postMessage({ type: 'DB_UPDATE', payload: { entity: 'branchStats', data: branches } });
-  channel.close();
+  try {
+    const channel = new BroadcastChannel('pos_demo_channel');
+    channel.postMessage({ type: 'DB_UPDATE', payload: { entity: 'branchStats', data: branches } });
+    channel.close();
+  } catch {}
+
+  // Sync ke Supabase agar semua tablet/browser kasir mendapatkan data cabang terbaru secara instan
+  (async () => {
+    try {
+      await supabase.from('transactions').insert({
+        total_amount: 0,
+        payment_status: 'SYSTEM_CONFIG_BRANCHES',
+        payment_method: 'BRANCHES',
+        snapshot_url: JSON.stringify(branches),
+        branch_id: 'SYSTEM'
+      });
+    } catch (err) {
+      console.error("Cloud sync branches failed:", err);
+    }
+  })();
 }
 
 export const DEFAULT_CUSTOMERS = [

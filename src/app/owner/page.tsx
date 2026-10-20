@@ -382,6 +382,39 @@ export default function OwnerDashboard() {
       console.warn("Gagal membaca pos_system_settings:", e);
     }
 
+    // Load konfigurasi cabang & karyawan dari Supabase (sinkron lintas browser)
+    const loadConfigFromSupabase = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('transactions')
+          .select('*')
+          .in('payment_status', ['SYSTEM_CONFIG_OPERATORS', 'SYSTEM_CONFIG_BRANCHES'])
+          .order('created_at', { ascending: false });
+
+        if (data && !error && data.length > 0) {
+          const opsRow = data.find((r: any) => r.payment_status === 'SYSTEM_CONFIG_OPERATORS');
+          if (opsRow && opsRow.snapshot_url) {
+            try {
+              const ops = JSON.parse(opsRow.snapshot_url);
+              setOperators(ops);
+              localStorage.setItem("pos_operators", JSON.stringify(ops));
+            } catch {}
+          }
+          const branchRow = data.find((r: any) => r.payment_status === 'SYSTEM_CONFIG_BRANCHES');
+          if (branchRow && branchRow.snapshot_url) {
+            try {
+              const brs = JSON.parse(branchRow.snapshot_url);
+              setBranchStats(brs);
+              localStorage.setItem("pos_branches", JSON.stringify(brs));
+            } catch {}
+          }
+        }
+      } catch (err) {
+        console.error("Config cloud sync error:", err);
+      }
+    };
+    loadConfigFromSupabase();
+
     // Load data Supabase saat awal mount
     loadDataFromSupabase();
 

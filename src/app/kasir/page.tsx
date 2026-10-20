@@ -6,7 +6,7 @@ import { uploadSnapshot } from "@/lib/cloudinary";
 import { printReceipt, connectPrinter, activePrinterDevice } from "@/lib/print";
 import { Camera, Printer, ShoppingCart, Info, ScanLine, User, MapPin, Wifi, Bluetooth, Plus, Minus, Trash2, XCircle, RefreshCcw, Video, ChevronLeft, ChevronRight, Wrench, CheckCircle, Lock, Unlock, LogOut } from "lucide-react";
 
-import { getProducts, saveProducts, getOperators, getBranches, getCustomers, saveCustomers } from "@/lib/localDb";
+import { getProducts, saveProducts, getOperators, saveOperators, getBranches, saveBranches, getCustomers, saveCustomers } from "@/lib/localDb";
 
 type Product = {
   id: string | number;
@@ -58,6 +58,40 @@ export default function KasirPage() {
     if (savedBranches && savedBranches.length > 0) {
       setBranchName(savedBranches[0].name);
     }
+
+    // Load konfigurasi cabang & karyawan dari Supabase (sinkron lintas browser / device)
+    const loadConfigFromSupabase = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('transactions')
+          .select('*')
+          .in('payment_status', ['SYSTEM_CONFIG_OPERATORS', 'SYSTEM_CONFIG_BRANCHES'])
+          .order('created_at', { ascending: false });
+
+        if (data && !error && data.length > 0) {
+          const opsRow = data.find((r: any) => r.payment_status === 'SYSTEM_CONFIG_OPERATORS');
+          if (opsRow && opsRow.snapshot_url) {
+            try {
+              const ops = JSON.parse(opsRow.snapshot_url);
+              saveOperators(ops);
+            } catch {}
+          }
+          const branchRow = data.find((r: any) => r.payment_status === 'SYSTEM_CONFIG_BRANCHES');
+          if (branchRow && branchRow.snapshot_url) {
+            try {
+              const brs = JSON.parse(branchRow.snapshot_url);
+              saveBranches(brs);
+              if (brs && brs.length > 0) {
+                setBranchName(brs[0].name);
+              }
+            } catch {}
+          }
+        }
+      } catch (err) {
+        console.error("Config cloud sync error:", err);
+      }
+    };
+    loadConfigFromSupabase();
 
     // Load produk dari Supabase (lebih prioritas dari localStorage)
     const loadProductsFromSupabase = async () => {
