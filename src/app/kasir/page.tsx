@@ -121,10 +121,12 @@ export default function KasirPage() {
           .single();
 
         if (data && !error) {
-          const lastTime = new Date(data.updated_at || data.last_heartbeat).getTime();
-          const diffSeconds = (Date.now() - lastTime) / 1000;
-          // Perangkat dianggap Online jika mengirim heartbeat dalam 120 detik terakhir
-          setIotStatus(diffSeconds < 120 ? "Online" : "Offline");
+          const t1 = data.last_heartbeat ? new Date(data.last_heartbeat).getTime() : 0;
+          const t2 = data.updated_at ? new Date(data.updated_at).getTime() : 0;
+          const lastTime = Math.max(t1, t2);
+          const diffSeconds = lastTime > 0 ? (Date.now() - lastTime) / 1000 : 9999;
+          // Perangkat dianggap Online jika mengirim heartbeat atau pembaruan dalam 120 detik terakhir
+          setIotStatus(Math.abs(diffSeconds) < 120 ? "Online" : "Offline");
         } else {
           setIotStatus("Offline");
         }
@@ -145,9 +147,11 @@ export default function KasirPage() {
         { event: '*', schema: 'public', table: 'branch_devices' },
         (payload: any) => {
           if (payload.new) {
-            const lastTime = new Date(payload.new.updated_at || payload.new.last_heartbeat).getTime();
-            const diffSeconds = (Date.now() - lastTime) / 1000;
-            setIotStatus(diffSeconds < 120 ? "Online" : "Offline");
+            const t1 = payload.new.last_heartbeat ? new Date(payload.new.last_heartbeat).getTime() : 0;
+            const t2 = payload.new.updated_at ? new Date(payload.new.updated_at).getTime() : 0;
+            const lastTime = Math.max(t1, t2);
+            const diffSeconds = lastTime > 0 ? (Date.now() - lastTime) / 1000 : 9999;
+            setIotStatus(Math.abs(diffSeconds) < 120 ? "Online" : "Offline");
           }
         }
       )
@@ -234,7 +238,12 @@ export default function KasirPage() {
   const kembalian = paymentMethod === "CASH" ? Math.max(0, cashReceived - totalAmount) : 0;
   
   // Hitung jumlah ban untuk Nitrogen
-  const nitrogenQty = cart.filter(c => c.name.toLowerCase().includes('isi') || c.name.toLowerCase().includes('tambal') || c.name.toLowerCase().includes('nitrogen')).reduce((sum, item) => sum + item.qty, 0);
+  const nitrogenQty = cart.filter(c => 
+    c.category === 'nitrogen' || 
+    c.name.toLowerCase().includes('isi') || 
+    c.name.toLowerCase().includes('tambal') || 
+    c.name.toLowerCase().includes('nitrogen')
+  ).reduce((sum, item) => sum + item.qty, 0);
   const iotDurationSeconds = nitrogenQty * 120; // 120 detik per ban
 
   const capturePhoto = async (): Promise<string | null> => {
@@ -244,22 +253,46 @@ export default function KasirPage() {
       
       return new Promise((resolve) => {
         const video = document.createElement("video");
+        video.muted = true;
+        video.playsInline = true;
         video.srcObject = stream;
-        video.play();
         
+        let hasResolved = false;
+        const cleanup = () => {
+          stream.getTracks().forEach(track => track.stop());
+          setCameraStatus("Ready");
+        };
+
+        const doCapture = () => {
+          if (hasResolved) return;
+          hasResolved = true;
+          try {
+            const canvas = document.createElement("canvas");
+            canvas.width = video.videoWidth || 640;
+            canvas.height = video.videoHeight || 480;
+            canvas.getContext("2d")?.drawImage(video, 0, 0);
+            cleanup();
+            resolve(canvas.toDataURL("image/jpeg", 0.7));
+          } catch (e) {
+            cleanup();
+            resolve(null);
+          }
+        };
+
+        // Safety timeout 1.5 detik agar transaksi tidak pernah gantung jika kamera lambat
+        const timeoutId = setTimeout(doCapture, 1500);
+
         video.onplaying = () => {
           setTimeout(() => {
-            const canvas = document.createElement("canvas");
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            canvas.getContext("2d")?.drawImage(video, 0, 0);
-            
-            stream.getTracks().forEach(track => track.stop());
-            setCameraStatus("Ready");
-            
-            resolve(canvas.toDataURL("image/jpeg", 0.7));
-          }, 500);
+            clearTimeout(timeoutId);
+            doCapture();
+          }, 300);
         };
+
+        video.play().catch(() => {
+          clearTimeout(timeoutId);
+          doCapture();
+        });
       });
     } catch (err) {
       console.log("Kamera gagal diakses:", err);
