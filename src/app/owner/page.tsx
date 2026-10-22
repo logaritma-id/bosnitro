@@ -189,7 +189,7 @@ export default function OwnerDashboard() {
 
   const handleUnlockOwner = (e: React.FormEvent) => {
     e.preventDefault();
-    if (ownerPinInput === "889900" || ownerPinInput === "123456") {
+    if (ownerPinInput === "alkahfilog2026") {
       if (typeof window !== "undefined") {
         sessionStorage.setItem("alkahfi_owner_auth", "unlocked");
       }
@@ -1285,11 +1285,11 @@ export default function OwnerDashboard() {
             <div>
               <input
                 type="password"
-                maxLength={6}
+                maxLength={32}
                 value={ownerPinInput}
-                onChange={(e) => setOwnerPinInput(e.target.value.replace(/[^0-9]/g, ""))}
-                placeholder="••••••"
-                className="w-full text-center text-3xl tracking-[0.5em] font-mono py-3.5 bg-slate-950 border border-slate-700 rounded-2xl text-white outline-none focus:border-indigo-500 transition"
+                onChange={(e) => setOwnerPinInput(e.target.value)}
+                placeholder="Masukkan Master Password..."
+                className="w-full text-center text-lg tracking-widest font-mono py-3.5 bg-slate-950 border border-slate-700 rounded-2xl text-white outline-none focus:border-indigo-500 transition placeholder:text-slate-600 placeholder:text-sm placeholder:tracking-normal"
                 autoFocus
               />
               {ownerPinError && (
@@ -1306,7 +1306,7 @@ export default function OwnerDashboard() {
           </form>
 
           <div className="pt-2 border-t border-slate-800/80 flex justify-between items-center text-xs text-slate-500">
-            <span>Master PIN: <code>889900</code></span>
+            <span className="text-slate-600 font-mono text-[11px]">Security Sentinel Active</span>
             <Link href="/kasir" className="text-indigo-400 hover:text-indigo-300 font-semibold">
               ← Ke Aplikasi Kasir
             </Link>
