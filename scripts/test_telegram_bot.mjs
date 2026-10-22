@@ -84,6 +84,22 @@ const KEYBOARDS = {
       ]
     ]
   },
+  DURASI: {
+    inline_keyboard: [
+      [
+        { text: "⏱️ Set 60s (1 Ban)", callback_data: "/set_durasi_60" },
+        { text: "⏱️ Set 120s (2 Ban)", callback_data: "/set_durasi_120" }
+      ],
+      [
+        { text: "⏱️ Set 180s (3 Ban)", callback_data: "/set_durasi_180" },
+        { text: "⏱️ Set 240s (4 Ban)", callback_data: "/set_durasi_240" }
+      ],
+      [
+        { text: "🔙 Menu Mesin", callback_data: "/menu_mesin" },
+        { text: "🏠 Menu Utama", callback_data: "/menu_utama" }
+      ]
+    ]
+  },
   CONFIRMATION: {
     inline_keyboard: [
       [
@@ -497,6 +513,46 @@ async function handleMessage(text, fromName = 'Boss', chatId = '') {
       text: `🔓 <b>KUNCI DIBUKA (NORMAL IDLE)!</b>\n\nMesin kembali siap melayani transaksi kasir.`,
       keyboard: KEYBOARDS.MESIN
     };
+  }
+
+  // Set Durasi Cepat via Tombol
+  if (lower.startsWith('/set_durasi_')) {
+    const sec = parseInt(lower.replace('/set_durasi_', '')) || 60;
+    await supabase.from('branch_devices').update({ active_duration_seconds: sec, updated_at: new Date().toISOString() }).eq('device_code', 'NITRO-01');
+    return {
+      type: 'text',
+      text: `⏱️ <b>DURASI KATUP BERHASIL DIATUR!</b>\n\n` +
+        `Durasi aktif katup solenoid <b>NITRO-01</b> diatur menjadi <b>${sec} detik</b>.\n` +
+        `ESP32 akan menggunakan nilai ini saat solenoid diaktifkan.`,
+      keyboard: KEYBOARDS.DURASI
+    };
+  }
+
+  // Set Durasi via Teks: +durasi [detik]
+  if (lower.startsWith('+durasi ') || (lower.includes('durasi') && /\d+/.test(lower) && (lower.includes('ubah') || lower.includes('set') || lower.includes('ganti')))) {
+    const sec = parseInt(clean.replace(/[^0-9]/g, '')) || 60;
+    await supabase.from('branch_devices').update({ active_duration_seconds: sec, updated_at: new Date().toISOString() }).eq('device_code', 'NITRO-01');
+    return {
+      type: 'text',
+      text: `⏱️ <b>SUKSES! DURASI KATUP DIPERBARUI</b>\n\n` +
+        `Durasi aktif katup solenoid <b>NITRO-01</b> diubah menjadi <b>${sec} detik</b>.`,
+      keyboard: KEYBOARDS.DURASI
+    };
+  }
+
+  // Tampilkan Informasi Durasi Katup
+  if (lower === '/durasi_katup' || lower.includes('durasi katup') || lower === 'durasi') {
+    const { data: dev } = await supabase.from('branch_devices').select('*').eq('device_code', 'NITRO-01').single();
+    const currentSec = dev?.active_duration_seconds || 0;
+    let msg = `⏱️ <b>PENGATURAN DURASI KATUP NITROGEN (ESP32)</b>\n\n`;
+    msg += `• <b>Perangkat:</b> NITRO-01 (Graha Prima)\n`;
+    msg += `• <b>Durasi Terakhir Tercatat:</b> <b>${currentSec} detik</b>\n\n`;
+    msg += `<b>Aturan Standar Otomatis Kasir:</b>\n`;
+    msg += `• Tambah Angin Motor: 60 detik / ban\n`;
+    msg += `• Isi Baru / Mobil: 120 - 240 detik\n\n`;
+    msg += `<i>Anda bisa mengatur durasi katup dengan klik tombol cepat di bawah atau ketik langsung:</i>\n`;
+    msg += `<code>+durasi [detik]</code> (contoh: <code>+durasi 90</code>)`;
+    return { type: 'text', text: msg, keyboard: KEYBOARDS.DURASI };
   }
 
   // Kasir Jaga
