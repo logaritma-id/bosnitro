@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
 import { 
   LayoutDashboard, 
   Camera, 
@@ -189,24 +190,23 @@ export default function OwnerDashboard() {
         .select('*');
 
       if (devices && !devErr) {
-        const nitroDevice = devices.find(d => d.device_code === 'NITRO-01');
-        let isNitroOnline = false;
-        let lastActiveStr = "";
-
-        if (nitroDevice) {
-          const lastTime = new Date(nitroDevice.updated_at || nitroDevice.last_heartbeat).getTime();
-          const diffSec = (Date.now() - lastTime) / 1000;
-          isNitroOnline = diffSec < 120; // 2 menit
-          lastActiveStr = new Date(nitroDevice.updated_at || nitroDevice.last_heartbeat).toLocaleString('id-ID');
-        }
-
-        setBranchStats(prev => prev.map(b => {
-          if (b.name === 'Tambun 1') {
+        setBranchStats(prev => prev.map((b, i) => {
+          const devCode = b.deviceCode || (i === 0 ? 'NITRO-01' : `NITRO-0${i + 1}`);
+          const matchingDevice = devices.find(d => d.device_code === devCode) || 
+                                 (i === 0 ? devices.find(d => d.device_code === 'NITRO-01') : undefined);
+          if (matchingDevice) {
+            const hbTime = matchingDevice.last_heartbeat ? new Date(matchingDevice.last_heartbeat).getTime() : 0;
+            const upTime = matchingDevice.updated_at ? new Date(matchingDevice.updated_at).getTime() : 0;
+            const lastTime = Math.max(hbTime, upTime);
+            const diffSec = lastTime > 0 ? Math.abs((Date.now() - lastTime) / 1000) : 999999;
+            const isOnline = diffSec < 180; // 3 menit
+            const lastActiveStr = lastTime > 0 ? new Date(lastTime).toLocaleString('id-ID') : '-';
             return {
               ...b,
-              status: isNitroOnline ? 'Online' : 'Offline',
+              deviceCode: devCode,
+              status: isOnline ? 'Online' : 'Offline',
               lastActive: lastActiveStr,
-              deviceStatus: nitroDevice?.device_status || 'IDLE'
+              deviceStatus: matchingDevice.device_status || 'IDLE'
             };
           }
           return b;
@@ -370,6 +370,7 @@ export default function OwnerDashboard() {
     setProducts(getProducts());
     setOperators(getOperators());
     setBranchStats(getBranches());
+    setCustomers(getCustomers());
     setKpiSettings(getKpiSettings());
     
     // Load System Settings dari localStorage jika ada
@@ -434,6 +435,23 @@ export default function OwnerDashboard() {
       }
     };
     loadProductsFromSupabase();
+
+    // Load data CRM Pelanggan dari Supabase
+    const loadCustomersFromSupabase = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('customers')
+          .select('*')
+          .order('id', { ascending: false });
+        if (data && !error && data.length > 0) {
+          setCustomers(data);
+          saveCustomers(data);
+        }
+      } catch (err) {
+        console.warn("Gagal memuat CRM pelanggan dari Supabase:", err);
+      }
+    };
+    loadCustomersFromSupabase();
 
     // Auto-refresh berkala setiap 6 detik
     const pollInterval = setInterval(loadDataFromSupabase, 6000);
@@ -1325,10 +1343,14 @@ export default function OwnerDashboard() {
               </select>
             </div>
             {activeTab === 'overview' && (
-               <div className="hidden md:flex items-center space-x-2 bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-2 rounded-lg ml-2">
-                 <CheckCircle size={16} />
-                 <span className="text-sm font-bold">Semua Sistem Online</span>
-               </div>
+               <Link 
+                 href="/status"
+                 className="hidden md:flex items-center space-x-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-3 py-2 rounded-lg ml-2 transition shadow-xs cursor-pointer group"
+               >
+                 <CheckCircle size={16} className="text-emerald-500 group-hover:scale-110 transition" />
+                 <span className="text-xs font-bold">Semua Sistem Online</span>
+                 <span className="text-[10px] bg-emerald-200/80 text-emerald-900 px-1.5 py-0.5 rounded font-mono font-semibold">DevOps Sentinel</span>
+               </Link>
             )}
           </div>
         </header>
@@ -2744,7 +2766,7 @@ export default function OwnerDashboard() {
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {displayedBranches.map((branch, i) => {
-                        const deviceCode = branch.deviceCode || (branch.name === 'Tambun 1' ? 'NITRO-01' : `NITRO-0${i + 1}`);
+                        const deviceCode = branch.deviceCode || (branch.name === 'Tambun 1' || i === 0 ? 'NITRO-01' : `NITRO-0${i + 1}`);
                         return (
                           <tr key={i} className="hover:bg-slate-50 transition-colors">
                             <td className="p-4 font-bold text-gray-900 flex items-center space-x-3">
