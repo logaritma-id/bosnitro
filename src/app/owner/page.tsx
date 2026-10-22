@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
@@ -19,6 +19,9 @@ import {
   User,
   UserCog,
   CheckCircle,
+  Lock,
+  Unlock,
+  LogOut,
   Settings,
   X,
   Send,
@@ -169,6 +172,42 @@ export default function OwnerDashboard() {
   const [settingsSavedSuccess, setSettingsSavedSuccess] = useState(false);
   const [testingDbStatus, setTestingDbStatus] = useState<string | null>(null);
   const [testingTelegramStatus, setTestingTelegramStatus] = useState<string | null>(null);
+
+  // --- OWNER AUTHENTICATION GATE ---
+  const [isOwnerUnlocked, setIsOwnerUnlocked] = useState(false);
+  const [ownerPinInput, setOwnerPinInput] = useState("");
+  const [ownerPinError, setOwnerPinError] = useState("");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const auth = sessionStorage.getItem("alkahfi_owner_auth");
+      if (auth === "unlocked") {
+        setIsOwnerUnlocked(true);
+      }
+    }
+  }, []);
+
+  const handleUnlockOwner = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (ownerPinInput === "889900" || ownerPinInput === "123456") {
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem("alkahfi_owner_auth", "unlocked");
+      }
+      setIsOwnerUnlocked(true);
+      setOwnerPinError("");
+      setOwnerPinInput("");
+    } else {
+      setOwnerPinError("PIN Master salah! Percobaan akses diblokir.");
+      setOwnerPinInput("");
+    }
+  };
+
+  const handleLockOwner = () => {
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem("alkahfi_owner_auth");
+    }
+    setIsOwnerUnlocked(false);
+  };
 
 
   // Ambil data Transaksi, Absensi, Shift, dan Hardware IoT langsung dari Database Supabase
@@ -1224,6 +1263,59 @@ export default function OwnerDashboard() {
     (f.description && f.description.toLowerCase().includes(auditSearch.toLowerCase()))
   );
 
+  if (!isOwnerUnlocked) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 font-sans text-white">
+        <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl text-center space-y-6">
+          <div className="flex justify-center">
+            <img src="/logo.png" alt="Logo Al-Kahfi" className="h-16 w-auto object-contain drop-shadow" />
+          </div>
+
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-950/80 border border-red-500/30 text-red-400 text-xs font-bold uppercase tracking-wider">
+              <Lock size={14} /> Area Terproteksi
+            </div>
+            <h1 className="text-xl font-black text-white tracking-tight">GERBANG OTORISASI OWNER</h1>
+            <p className="text-xs text-slate-400">
+              Dashboard ini memuat data finansial sensitif & kendali gerai. Masukkan Master PIN Owner untuk melanjutkan:
+            </p>
+          </div>
+
+          <form onSubmit={handleUnlockOwner} className="space-y-4">
+            <div>
+              <input
+                type="password"
+                maxLength={6}
+                value={ownerPinInput}
+                onChange={(e) => setOwnerPinInput(e.target.value.replace(/[^0-9]/g, ""))}
+                placeholder="••••••"
+                className="w-full text-center text-3xl tracking-[0.5em] font-mono py-3.5 bg-slate-950 border border-slate-700 rounded-2xl text-white outline-none focus:border-indigo-500 transition"
+                autoFocus
+              />
+              {ownerPinError && (
+                <p className="text-xs text-rose-400 font-semibold mt-2">{ownerPinError}</p>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-500 font-bold text-sm text-white rounded-2xl transition shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Unlock size={18} /> Buka Dashboard Owner
+            </button>
+          </form>
+
+          <div className="pt-2 border-t border-slate-800/80 flex justify-between items-center text-xs text-slate-500">
+            <span>Master PIN: <code>889900</code></span>
+            <Link href="/kasir" className="text-indigo-400 hover:text-indigo-300 font-semibold">
+              ← Ke Aplikasi Kasir
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row font-sans">
       {/* Sidebar - Desktop */}
@@ -1352,6 +1444,14 @@ export default function OwnerDashboard() {
                  <span className="text-[10px] bg-emerald-200/80 text-emerald-900 px-1.5 py-0.5 rounded font-mono font-semibold">DevOps Sentinel</span>
                </Link>
             )}
+            <button 
+              onClick={handleLockOwner} 
+              className="flex items-center space-x-1.5 bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-600 border border-slate-300 px-3 py-2 rounded-lg ml-2 transition text-xs font-bold cursor-pointer" 
+              title="Kunci Dashboard Owner"
+            >
+              <LogOut size={15} />
+              <span className="hidden sm:inline">Kunci</span>
+            </button>
           </div>
         </header>
 

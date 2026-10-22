@@ -1,0 +1,24 @@
+{
+  "name": "POS Nitrogen Al-Kahfi",
+  "short_name": "POS Al-Kahfi",
+  "description": "Aplikasi Kasir Lapangan & IoT Nitrogen Al-Kahfi",
+  "start_url": "/kasir",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#012B89",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
