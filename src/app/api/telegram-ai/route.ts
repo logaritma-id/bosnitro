@@ -1,31 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { processOwnerMessage } from '@/lib/telegram-agent';
+import { processOwnerMessage, KEYBOARDS } from '@/lib/telegram-agent';
 
 // Token bot diambil dari environment variables atau fallback
 const getBotToken = () => {
   return process.env.TELEGRAM_BOT_TOKEN || process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN || '';
 };
 
-// Inline Keyboard Tombol Cepat untuk Owner
-const QUICK_KEYBOARD = {
-  inline_keyboard: [
-    [
-      { text: "📊 Cek Omset", callback_data: "/omset" },
-      { text: "📹 Foto CCTV", callback_data: "/cctv" }
-    ],
-    [
-      { text: "🛡️ Audit Fraud", callback_data: "/fraud" },
-      { text: "⚙️ Status Mesin", callback_data: "/mesin" }
-    ],
-    [
-      { text: "🔒 Kunci Mesin", callback_data: "/kunci" },
-      { text: "🔓 Buka Kunci", callback_data: "/buka" }
-    ]
-  ]
-};
-
 // Helper Kirim Pesan Teks Telegram
-async function sendTelegramMessage(botToken: string, chatId: number | string, text: string) {
+async function sendTelegramMessage(botToken: string, chatId: number | string, text: string, keyboard: any = KEYBOARDS.MAIN) {
   const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
   return fetch(url, {
     method: 'POST',
@@ -34,14 +16,14 @@ async function sendTelegramMessage(botToken: string, chatId: number | string, te
       chat_id: chatId,
       text: text,
       parse_mode: 'HTML',
-      reply_markup: QUICK_KEYBOARD,
+      reply_markup: keyboard,
       disable_web_page_preview: false
     })
   });
 }
 
 // Helper Kirim Foto Telegram (Snapshot CCTV)
-async function sendTelegramPhoto(botToken: string, chatId: number | string, photoUrl: string, caption: string) {
+async function sendTelegramPhoto(botToken: string, chatId: number | string, photoUrl: string, caption: string, keyboard: any = KEYBOARDS.MAIN) {
   const url = `https://api.telegram.org/bot${botToken}/sendPhoto`;
   return fetch(url, {
     method: 'POST',
@@ -51,7 +33,7 @@ async function sendTelegramPhoto(botToken: string, chatId: number | string, phot
       photo: photoUrl,
       caption: caption,
       parse_mode: 'HTML',
-      reply_markup: QUICK_KEYBOARD
+      reply_markup: keyboard
     })
   });
 }
@@ -85,8 +67,8 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     status: 'ONLINE',
-    service: 'Al-Kahfi Executive Telegram AI Bot',
-    version: '1.0.0',
+    service: 'Al-Kahfi Executive Telegram AI Bot & Master Execution Engine',
+    version: '2.0.0',
     botTokenConfigured: Boolean(token),
     webhookEndpoint: webhookUrl,
     setupGuide: {
@@ -139,20 +121,21 @@ export async function POST(req: NextRequest) {
     // Indikator "Sedang Mengetik..." di Telegram
     sendChatAction(token, chatId, 'typing');
 
-    // Proses Perintah lewat AI Agent Brain
-    const agentResponse = await processOwnerMessage(text, fromName);
+    // Proses Perintah lewat AI Agent Brain & Execution Engine
+    const agentResponse = await processOwnerMessage(text, fromName, chatId);
+    const keyboard = (agentResponse as any).keyboard || KEYBOARDS.MAIN;
 
     // Kirim Balasan ke Telegram
     if (agentResponse.type === 'photo' && agentResponse.photoUrl) {
       sendChatAction(token, chatId, 'upload_photo');
-      const photoRes = await sendTelegramPhoto(token, chatId, agentResponse.photoUrl, agentResponse.caption || '');
+      const photoRes = await sendTelegramPhoto(token, chatId, agentResponse.photoUrl, agentResponse.caption || '', keyboard);
       
       // Jika upload photo gagal (misal URL foto tidak valid), fallback ke teks
       if (!photoRes.ok) {
-        await sendTelegramMessage(token, chatId, agentResponse.caption || agentResponse.text || 'Gagal memuat foto');
+        await sendTelegramMessage(token, chatId, agentResponse.caption || agentResponse.text || 'Gagal memuat foto', keyboard);
       }
     } else {
-      await sendTelegramMessage(token, chatId, agentResponse.text);
+      await sendTelegramMessage(token, chatId, agentResponse.text || '', keyboard);
     }
 
     return NextResponse.json({ ok: true });
