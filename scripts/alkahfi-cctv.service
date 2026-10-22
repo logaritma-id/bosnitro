@@ -1,0 +1,15 @@
+[Unit]
+Description=Al-Kahfi CCTV POS Edge Bridge Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/cctv_bridge
+ExecStart=/usr/bin/python3 /root/cctv_bridge/cctv_bridge.py
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
