@@ -602,15 +602,82 @@ async function handleMessage(text, fromName = 'Boss', chatId = '') {
   };
 }
 
+// ---------------- BACKGROUND DEVOPS SENTINEL ----------------
+const devStatusCache = new Map();
+let lastDevCheck = 0;
+
+async function checkDevOpsHealth() {
+  const now = Date.now();
+  if (now - lastDevCheck < 25000) return; // Cek tiap 25 detik
+  lastDevCheck = now;
+
+  try {
+    const { data: devices } = await supabase.from('branch_devices').select('*');
+    if (devices) {
+      for (const dev of devices) {
+        const code = dev.device_code || 'NITRO-01';
+        const lastHb = dev.last_heartbeat ? new Date(dev.last_heartbeat).getTime() : 0;
+        const diffSec = Math.round((now - lastHb) / 1000);
+        const isOnline = diffSec <= 45;
+
+        const prevState = devStatusCache.get(code);
+
+        // KASUS A: Perangkat baru saja mati / dicabut (ONLINE -> OFFLINE)
+        if (prevState === 'ONLINE' && !isOnline) {
+          devStatusCache.set(code, 'OFFLINE');
+          const timeStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' });
+          const alertMsg = `🚨 <b>[DEV-ALERT: PERANGKAT OFFLINE]</b>\n\n` +
+            `• <b>Perangkat:</b> <code>${code}</code> (Graha Prima)\n` +
+            `• <b>Waktu Hilang:</b> ${timeStr} WIB\n` +
+            `• <b>Durasi:</b> ${diffSec} detik lalu\n` +
+            `• <b>Indikasi:</b> Daya listrik dicabut, saklar dimatikan, atau modem Orbit putus sinyal.\n\n` +
+            `<i>💡 Info Developer: Perangkat terdeteksi mati sebelum owner menyadarinya.</i>`;
+          
+          await sendTelegram('sendMessage', {
+            chat_id: '7061579608',
+            text: alertMsg,
+            parse_mode: 'HTML'
+          }).catch(() => {});
+        }
+        // KASUS B: Perangkat kembali nyala (OFFLINE -> ONLINE)
+        else if (prevState === 'OFFLINE' && isOnline) {
+          devStatusCache.set(code, 'ONLINE');
+          const timeStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' });
+          const recoveryMsg = `🟢 <b>[DEV-ALERT: PERANGKAT KEMBALI ONLINE]</b>\n\n` +
+            `• <b>Perangkat:</b> <code>${code}</code> (Graha Prima)\n` +
+            `• <b>Waktu Pulih:</b> ${timeStr} WIB\n` +
+            `• <b>Status:</b> Berhasil reconnect & kirim heartbeat ke Supabase.\n\n` +
+            `<i>Sistem operasional nitrogen kembali normal 100%.</i>`;
+
+          await sendTelegram('sendMessage', {
+            chat_id: '7061579608',
+            text: recoveryMsg,
+            parse_mode: 'HTML'
+          }).catch(() => {});
+        }
+        // Cache awal
+        else if (!prevState) {
+          devStatusCache.set(code, isOnline ? 'ONLINE' : 'OFFLINE');
+        }
+      }
+    }
+  } catch (err) {
+    // Abaikan error jaringan sementara
+  }
+}
+
 async function startPolling() {
   console.log("🚀 Menghapus webhook lama untuk beralih ke Long Polling v2.0...");
   await sendTelegram('deleteWebhook', { drop_pending_updates: false });
 
-  console.log("✅ Bot AI Al-Kahfi v2.0 (Executive Execution Engine) AKTIF & STANDBY!");
+  console.log("✅ Bot AI Al-Kahfi v2.0 (Executive Execution Engine + DevOps Sentinel) AKTIF!");
   let offset = 0;
 
   while (true) {
     try {
+      // Jalankan Sentinel Pengawas Hardware Lapangan
+      checkDevOpsHealth().catch(() => {});
+
       const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getUpdates?offset=${offset}&timeout=20`);
       if (res.ok) {
         const data = await res.json();

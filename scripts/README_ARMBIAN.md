@@ -56,7 +56,38 @@ systemctl status alkahfi-cctv
 
 ---
 
-## 3. Uji Coba (Live Test)
+## 3. Jalur Remote Maintenance Developer (Tailscale VPN — Kunci Pas Jarak Jauh)
+
+Agar Developer bisa meremote, update kode, atau cek kendala dari rumah/kantor tanpa harus datang ke gerai:
+
+### Pasang Tailscale di Armbian (Gratis & 1 Baris Perintah):
+```bash
+curl -fsSL https://tailscale.com/install.sh | sh
+tailscale up
+```
+*(Buka tautan login yang muncul di terminal untuk menghubungkan TV Box ke akun Tailscale Anda).*
+
+**Keuntungan Luar Biasa untuk Developer:**
+- Anda bisa SSH ke Armbian dari mana saja: `ssh root@<IP_TAILSCALE>`
+- Anda bisa cek log sistem secara real-time dari rumah: `journalctl -u alkahfi-cctv -f`
+- Melalui subnet routing, Anda bahkan bisa membuka dashboard modem Orbit (`192.168.8.1`) dan web camera CCTV langsung dari browser laptop Anda di rumah!
+
+---
+
+## 4. Pemeliharaan Rutin Subuh (Auto-Reboot Cron)
+
+Agar memori RAM TV Box selalu segar dan terhindar dari hang/freeze, pasang jadwal restart otomatis setiap jam 03:00 subuh saat gerai tutup:
+```bash
+crontab -e
+```
+Tambahkan baris berikut di paling bawah:
+```text
+0 3 * * * /sbin/reboot
+```
+
+---
+
+## 5. Uji Coba Transaksi Lapangan (Live Test)
 1. Lakukan transaksi di Kasir (Rp 5.000 / Isi Angin).
 2. Klik **"Selesaikan Pembayaran"**.
 3. Struk tercetak di printer thermal.
