@@ -155,9 +155,8 @@ export default function KasirPage() {
           .single();
 
         if (data && !error) {
-          const isEspOnline = data.last_heartbeat === '2026-10-20T15:00:00+00:00' ||
-                              (data.last_heartbeat && Math.abs((Date.now() - new Date(data.last_heartbeat).getTime()) / 1000) < 180) ||
-                              (data.updated_at && Math.abs((Date.now() - new Date(data.updated_at).getTime()) / 1000) < 300);
+          const lastHb = data.last_heartbeat ? new Date(data.last_heartbeat).getTime() : 0;
+          const isEspOnline = lastHb > 0 && Math.abs((Date.now() - lastHb) / 1000) <= 60;
           setIotStatus(isEspOnline ? "Online" : "Offline");
         } else {
           setIotStatus("Offline");
@@ -179,9 +178,8 @@ export default function KasirPage() {
         { event: '*', schema: 'public', table: 'branch_devices' },
         (payload: any) => {
           if (payload.new) {
-            const isEspOnline = payload.new.last_heartbeat === '2026-10-20T15:00:00+00:00' ||
-                                (payload.new.last_heartbeat && Math.abs((Date.now() - new Date(payload.new.last_heartbeat).getTime()) / 1000) < 180) ||
-                                (payload.new.updated_at && Math.abs((Date.now() - new Date(payload.new.updated_at).getTime()) / 1000) < 300);
+            const lastHb = payload.new.last_heartbeat ? new Date(payload.new.last_heartbeat).getTime() : 0;
+            const isEspOnline = lastHb > 0 && Math.abs((Date.now() - lastHb) / 1000) <= 60;
             setIotStatus(isEspOnline ? "Online" : "Offline");
           }
         }
@@ -520,15 +518,18 @@ export default function KasirPage() {
         if (trxError) throw trxError;
         setPendingTrxId(trxData.id);
 
-        const duration = Math.max(60, iotDurationSeconds || 60);
-        await supabase
-          .from('branch_devices')
-          .update({
-            device_status: 'ACTIVE',
-            active_duration_seconds: duration,
-            updated_at: new Date().toISOString()
-          })
-          .eq('device_code', 'NITRO-01');
+        // Hanya picu katup solenoid jika keranjang berisi layanan Nitrogen
+        if (nitrogenQty > 0) {
+          const duration = Math.max(60, iotDurationSeconds || 60);
+          await supabase
+            .from('branch_devices')
+            .update({
+              device_status: 'ACTIVE',
+              active_duration_seconds: duration,
+              updated_at: new Date().toISOString()
+            })
+            .eq('device_code', 'NITRO-01');
+        }
       } else {
         console.log("ℹ️ Mode Demo: Transaksi disimpan lokal sebagai PENDING.");
         setPendingTrxId("demo-trx-id");
