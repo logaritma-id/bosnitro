@@ -22,7 +22,7 @@ const SUPABASE_KEY = envVars.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // Whitelist & Pending Actions
-const ALLOWED_CHAT_IDS = new Set(['7061579608', 7061579608, '-10023481920', -10023481920]);
+const ALLOWED_CHAT_IDS = new Set(['7061579608', 7061579608, '8636459793', 8636459793, '-10023481920', -10023481920]);
 const pendingActions = new Map();
 
 const KEYBOARDS = {

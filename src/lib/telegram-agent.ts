@@ -9,10 +9,12 @@ export const pendingActions = new Map<string | number, {
 }>();
 
 // Daftar ID Telegram yang diizinkan (Whitelist)
-// Baim: 7061579608, Owner: -10023481920
+// Baim: 7061579608, Owner (Suryadarma): 8636459793, Group: -10023481920
 export const ALLOWED_CHAT_IDS = new Set<string | number>([
   '7061579608',
   7061579608,
+  '8636459793',
+  8636459793,
   '-10023481920',
   -10023481920
 ]);
