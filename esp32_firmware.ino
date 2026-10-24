@@ -1,11 +1,11 @@
 /*
  * ==============================================================================
- * FIRMWARE IOT NITROGEN AL-KAHFI (SYSTEM A - TIME STARVATION)
+ * FIRMWARE IOT NITROGEN AL-KAHFI (SYSTEM A - TIME STARVATION) - PRODUCTION 24/7
  * Target Board  : ESP32 Dev Module / NodeMCU ESP32
- * Komponen      : ESP32 + Modul Relay 1-Channel + Solenoid Valve (12V DC)
+ * Komponen      : ESP32 + Modul Relay Optocoupler 1-Channel (Mode L) + Solenoid Valve 220V
  * Fitur Tambahan: WEB CAPTIVE PORTAL (WiFiManager) + Reset Button via Tombol BOOT
- *                 + WiFiClientSecure (SSL Insecure untuk HTTPS Supabase)
- *                 + Self-test Relay Klik saat Startup
+ *                 + WiFiClientSecure (Buffer Optimized 2KB RAM)
+ *                 + Anti-Freeze Auto-Recover + Retry Reset Status IDLE
  * ==============================================================================
  */
 
@@ -24,7 +24,7 @@ const char* DEVICE_CODE  = "NITRO-01";
 const int RELAY_PIN       = 4; // GPIO 4 terhubung ke pin IN Relay
 const int RESET_WIFI_PIN  = 0; // Tombol BOOT bawaan ESP32 (GPIO 0) untuk reset WiFi
 
-// Logika Relay (Modul relay user bertipe Aktif LOW: LOW = NYALA, HIGH = MATI/STANDBY)
+// Logika Relay Optocoupler (Jumper pada posisi L: LOW = NYALA, HIGH = MATI/STANDBY)
 #define RELAY_ON  LOW
 #define RELAY_OFF HIGH
 
@@ -43,18 +43,19 @@ void setup() {
   delay(1000);
   Serial.println("\n==============================================");
   Serial.println("  IoT Outlet Nitrogen Al-Kahfi - System A     ");
+  Serial.println("  Versi Produksi Stabil 24/7 (Optocoupler)    ");
   Serial.println("==============================================");
 
   // Setup Pin Hardware - Pastikan Relay MATI (Standby) saat startup
-  pinMode(RELAY_PIN, OUTPUT);
-  digitalWrite(RELAY_PIN, RELAY_OFF);
+  pinMode(RELAY_PIN, INPUT);
   pinMode(RESET_WIFI_PIN, INPUT_PULLUP);
 
-  // Self-Test Relay: Nyalakan 500ms lalu matikan agar terdengar bunyi klik konfirmasi hardware
-  Serial.println("[TEST] Uji coba klik relay 500ms...");
+  // Self-Test Relay: Nyalakan 400ms lalu matikan agar terdengar bunyi klik konfirmasi hardware
+  Serial.println("[TEST] Uji coba klik relay 400ms...");
+  pinMode(RELAY_PIN, OUTPUT);
   digitalWrite(RELAY_PIN, RELAY_ON);
-  delay(500);
-  digitalWrite(RELAY_PIN, RELAY_OFF);
+  delay(400);
+  pinMode(RELAY_PIN, INPUT);
   Serial.println("[TEST] Uji coba relay selesai. Relay kini tertutup (STANDBY).");
 
   // Inisialisasi Koneksi WiFi via Web Portal
@@ -65,6 +66,12 @@ void setup() {
 }
 
 void loop() {
+  // 0. Proteksi Anti-Freeze (Jika RAM bebas di bawah 25KB, restart bersih)
+  if (ESP.getFreeHeap() < 25000) {
+    Serial.println("[SYSTEM] RAM menipis, melakukan restart otomatis...");
+    ESP.restart();
+  }
+
   // 1. Cek apakah tombol BOOT (GPIO 0) ditekan selama 3 detik untuk reset WiFi
   cekTombolResetWiFi();
 
@@ -81,12 +88,16 @@ void loop() {
   // 3. Logika Timer Solenoid Valve (Otomatis Tutup saat waktu habis)
   if (isValveOpen) {
     if (currentMillis - valveStartTime >= activeDurationMs) {
+      Serial.println("[VALVE] WAKTU HABIS - Menutup katup otomatis sesuai batas durasi!");
       tutupValve();
     }
   }
 
-  // 4. Polling Status Perintah dari Kasir ke Supabase (Tiap 1,5 detik saat valve idle)
-  if (!isValveOpen && (currentMillis - lastPollTime >= 1500)) {
+  // 4. Polling Status Perintah dari Kasir ke Supabase
+  // - Saat katup aktif: polling tiap 1 detik agar saat kasir klik 'Selesai', katup seketika menutup!
+  // - Saat katup idle/standby: polling tiap 1.5 detik
+  unsigned long pollInterval = isValveOpen ? 1000 : 1500;
+  if (currentMillis - lastPollTime >= pollInterval) {
     lastPollTime = currentMillis;
     cekPerintahKasir();
   }
@@ -138,7 +149,7 @@ void cekTombolResetWiFi() {
 }
 
 // ==============================================================================
-// FUNGSI CEK PERINTAH KASIR DARI SUPABASE (HTTPS + SSL Insecure)
+// FUNGSI CEK PERINTAH KASIR DARI SUPABASE (HTTPS + SSL Buffer Opto)
 // ==============================================================================
 void cekPerintahKasir() {
   WiFiClientSecure client;
@@ -161,10 +172,15 @@ void cekPerintahKasir() {
         const char* status = doc[0]["device_status"];
         int durationSeconds = doc[0]["active_duration_seconds"] | 60;
 
-        // Jika kasir menekan tombol "Proses Pengerjaan" -> status jadi ACTIVE
-        if (String(status) == "ACTIVE") {
+        // KASUS 1: Jika kasir menekan tombol "Proses Pengerjaan" -> status jadi ACTIVE
+        if (String(status) == "ACTIVE" && !isValveOpen) {
           Serial.printf("[IoT] PERINTAH DITERIMA DARI KASIR: Buka Valve selama %d detik!\n", durationSeconds);
           bukaValve(durationSeconds);
+        }
+        // KASUS 2: Jika operator menekan tombol "Selesai" / "Lunasi" lebih cepat -> status jadi IDLE
+        else if (String(status) == "IDLE" && isValveOpen) {
+          Serial.println("[IoT] OPERATOR KLIK SELESAI: Pengerjaan selesai lebih awal. Menutup katup sekarang!");
+          tutupValve();
         }
       }
     } else {
@@ -182,36 +198,44 @@ void bukaValve(int seconds) {
   valveStartTime = millis();
   activeDurationMs = (unsigned long)seconds * 1000;
 
-  // Nyalakan Relay -> Solenoid Valve Terbuka
+  // Nyalakan Relay -> Solenoid Valve Terbuka (Tarik pin ke GND / Mode L)
+  pinMode(RELAY_PIN, OUTPUT);
   digitalWrite(RELAY_PIN, RELAY_ON);
   Serial.printf("[VALVE] RELAY NYALA - Solenoid Valve Terbuka selama %d detik!\n", seconds);
 }
 
 // ==============================================================================
-// FUNGSI TUTUP VALVE & KEMBALIKAN STATUS KE IDLE
+// FUNGSI TUTUP VALVE & KEMBALIKAN STATUS KE IDLE (DENGAN RETRY)
 // ==============================================================================
 void tutupValve() {
-  // Matikan Relay -> Solenoid Valve Tertutup
-  digitalWrite(RELAY_PIN, RELAY_OFF);
+  // Matikan Relay -> Solenoid Valve Tertutup (Lepas pin ke High-Z)
+  pinMode(RELAY_PIN, INPUT);
   isValveOpen = false;
   Serial.println("[VALVE] WAKTU HABIS - Relay Mati, Solenoid Valve Tertutup Rapat!");
 
-  // Update status kembali ke 'IDLE' di Supabase
+  // Update status kembali ke 'IDLE' di Supabase dengan retry 3x
   WiFiClientSecure client;
   client.setInsecure();
 
   HTTPClient http;
   String url = String(SUPABASE_URL) + "/rest/v1/branch_devices?device_code=eq." + DEVICE_CODE;
   
-  if (http.begin(client, url)) {
-    http.addHeader("apikey", SUPABASE_KEY);
-    http.addHeader("Authorization", String("Bearer ") + SUPABASE_KEY);
-    http.addHeader("Content-Type", "application/json");
-    http.addHeader("Prefer", "return=minimal");
+  for (int attempt = 0; attempt < 3; attempt++) {
+    if (http.begin(client, url)) {
+      http.addHeader("apikey", SUPABASE_KEY);
+      http.addHeader("Authorization", String("Bearer ") + SUPABASE_KEY);
+      http.addHeader("Content-Type", "application/json");
+      http.addHeader("Prefer", "return=minimal");
 
-    String jsonBody = "{\"device_status\":\"IDLE\",\"active_duration_seconds\":0}";
-    http.sendRequest("PATCH", jsonBody);
-    http.end();
+      String jsonBody = "{\"device_status\":\"IDLE\",\"active_duration_seconds\":0}";
+      int code = http.sendRequest("PATCH", jsonBody);
+      http.end();
+      if (code >= 200 && code < 300) {
+        Serial.println("[VALVE] Sukses update status IDLE ke Supabase.");
+        break;
+      }
+    }
+    delay(500);
   }
 }
 
@@ -231,7 +255,6 @@ void kirimHeartbeat() {
     http.addHeader("Content-Type", "application/json");
     http.addHeader("Prefer", "return=minimal");
 
-    // Catatan: Hanya perbarui last_heartbeat, JANGAN timpa device_status kasir!
     String jsonBody = "{\"last_heartbeat\":\"" + getISOTimestamp() + "\"}";
     http.sendRequest("PATCH", jsonBody);
     http.end();
@@ -246,5 +269,5 @@ String getISOTimestamp() {
     strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%SZ", timeinfo);
     return String(buffer);
   }
-  return "2026-10-20T12:00:00Z";
+  return "2026-10-22T12:00:00Z";
 }

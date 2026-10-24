@@ -48,6 +48,7 @@ export default function KasirPage() {
   const [cameraStatus, setCameraStatus] = useState<"Loading" | "Ready" | "Error">("Loading");
   const [vehicleType, setVehicleType] = useState<"motor" | "mobil" | null>(null);
   const [lastSnapshotUrl, setLastSnapshotUrl] = useState<string>("");
+  const [isValveStoppedManually, setIsValveStoppedManually] = useState(false);
   
   const [products, setProducts] = useState<Product[]>([]);
   const [branchName, setBranchName] = useState("");
@@ -535,12 +536,29 @@ export default function KasirPage() {
         setPendingTrxId("demo-trx-id");
       }
 
+      setIsValveStoppedManually(false);
       setCheckoutStep("payment");
     } catch (error) {
       console.error(error);
       alert("Terjadi kesalahan saat memulai pengerjaan.");
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const handleMatikanKatupCepat = async () => {
+    try {
+      await supabase
+        .from('branch_devices')
+        .update({
+          device_status: 'IDLE',
+          active_duration_seconds: 0,
+          updated_at: new Date().toISOString()
+        })
+        .eq('device_code', 'NITRO-01');
+      setIsValveStoppedManually(true);
+    } catch (e) {
+      console.error("Gagal mematikan katup cepat:", e);
     }
   };
 
@@ -563,6 +581,21 @@ export default function KasirPage() {
           .eq('id', pendingTrxId);
           
         if (updateError) throw updateError;
+
+        // Otomatis tutup katup solenoid seketika saat kasir klik Selesai / Lunasi
+        try {
+          await supabase
+            .from('branch_devices')
+            .update({
+              device_status: 'IDLE',
+              active_duration_seconds: 0,
+              updated_at: new Date().toISOString()
+            })
+            .eq('device_code', 'NITRO-01');
+          setIsValveStoppedManually(true);
+        } catch (devErr) {
+          console.warn("Gagal update device status ke IDLE:", devErr);
+        }
       }
 
       await printReceipt(cart, totalAmount);
@@ -1280,6 +1313,25 @@ export default function KasirPage() {
               </div>
               <h2 className="text-xl md:text-2xl font-black text-gray-800 tracking-tight">Sedang Dikerjakan...</h2>
               <p className="text-gray-700 font-semibold text-xs md:text-sm">Data tercatat di server. Selesaikan pengerjaan, lalu minta pembayaran ke pelanggan.</p>
+            </div>
+
+            {/* Tombol Penghenti Katup Cepat (Dual-Cutoff Safety) */}
+            <div className="w-full">
+              {isValveStoppedManually ? (
+                <div className="w-full py-2.5 px-4 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl font-bold text-xs flex items-center justify-center space-x-1.5 shadow-sm">
+                  <CheckCircle size={15} className="text-emerald-600" />
+                  <span>Katup Solenoid Sudah Ditutup</span>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleMatikanKatupCepat}
+                  className="w-full py-2.5 px-4 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl font-bold text-xs flex items-center justify-center space-x-1.5 transition-all shadow-sm active:scale-98 cursor-pointer"
+                >
+                  <XCircle size={15} className="text-amber-700" />
+                  <span>🛑 Selesai Isi / Matikan Katup Sekarang</span>
+                </button>
+              )}
             </div>
             
             {/* Payment Collection Form */}
